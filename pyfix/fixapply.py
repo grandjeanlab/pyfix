@@ -8,6 +8,7 @@ import os.path as op
 import dhcp.util.util as util
 import uuid
 import os
+import argparse
 
 
 def norm(d, dim=0):
@@ -137,24 +138,39 @@ def main(funcname, icamix, DDremove, sigma=None, motparams=None,
 
 
 if __name__ == "__main__":
-    #     funcname = "testsrf3/func_mbfix.func.gii"
-    #     tr = 0.392
-    #     motparams = "mc/prefiltered_func_data_mcf.par"
-    #     ics = 'sub-CC00174XX10/melodic_mix'
-    #     DDremove = np.loadtxt('sub-CC00174XX10/.fix').astype(int)
-    #
-    #     fixclean(funcname, tr, motparams, ics, DDremove)
+    parser = argparse.ArgumentParser(description="Apply FIX cleanup")
 
-    dpath = "sub-CC00300XX03/ses-96000/functional/denoise"
-    funcname = op.join(dpath, "filtered_func_data.nii.gz")
-    motparams = op.join(dpath, "mc", "prefiltered_func_data_mcf.par")
-    ics = op.join(dpath, "filtered_func_data.ica", "melodic_mix")
+    parser.add_argument('--motparams', default=None,
+                        help="Name of motion parameter file")
+    parser.add_argument('--outname', default=None,
+                        help="Name for cleaned func")
+    parser.add_argument('--sigma', default=None,
+                        help="Sigma (in volumes) for high-pass filter")
 
-    handlabels = op.join(dpath, "hand_labels_noise.txt")
-    cmd = 'tail -n 1 ' + handlabels
+    parser.add_argument('--filt-func', dest='filtfunc', action='store_true')
+    parser.add_argument('--no-filt-func', dest='filtfunc',
+                        action='store_false')
+    parser.set_defaults(filtfunc=False)
+
+    parser.add_argument('--filt-motparams', dest='filtmotparams',
+                        action='store_true')
+    parser.add_argument('--no-filt-motparams', dest='filtmotparams',
+                        action='store_false')
+    parser.set_defaults(filtmotparams=True)
+
+    reqd = parser.add_argument_group('required arguments')
+    reqd.add_argument('--func', help='Func file name', required=True)
+    reqd.add_argument('--mix', help='Melodic mixing matric (melodic_mix)',
+                      required=True)
+    reqd.add_argument('--classification', help='Fix classification file',
+                      required=True)
+
+    args = parser.parse_args()
+
+    cmd = 'tail -n 1 ' + args.classification
     DDremove = util.shrun(cmd).lstrip('[').rstrip(']').replace(" ", "")
     DDremove = np.fromstring(DDremove, dtype=int, sep=",")
 
-    sigma = 191
-
-    main(funcname, ics, DDremove, sigma=sigma, motparams=motparams)
+    main(args.func, args.mix, DDremove, sigma=args.sigma,
+         motparams=args.motparams, filtfunc=args.filtfunc,
+         filtmotparams=args.filtmotparams, outname=args.outname)
