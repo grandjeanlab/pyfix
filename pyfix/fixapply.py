@@ -126,14 +126,14 @@ def _main(funcname, icamix, ddremove, sigma=None, motparams=None,
 
     if isgifti:
         if outname is None:
-            outname = funcname.rstrip(".gii") + "_clean_py.gii"
+            outname = funcname.rstrip(".func.gii") + "_clean_pyfix.func.gii"
         _writegii(outname, func, func_srf)
         # print("write gifti")
     elif isnifti:
         func = np.reshape(func, dims, order='F')
         img = nb.Nifti1Image(func, funcnii.affine, funcnii.header)
         if outname is None:
-            outname = funcname.rstrip(".nii.gz") + "_clean_py.nii.gz"
+            outname = funcname.rstrip(".nii.gz") + "_clean_pyfix.nii.gz"
         nb.save(img, outname)
 
 
