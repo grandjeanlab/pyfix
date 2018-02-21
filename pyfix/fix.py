@@ -16,7 +16,7 @@ Usage:
                  [--motparam=MOTPARAM]
 
 """
-import docopt
+from docopt import docopt
 # import json
 import logging
 import os
@@ -418,8 +418,6 @@ class Fix(object):
         args['struct_seg_type'] = SegType.fsl_fast
 
         d.extract_features(**args)
-
-
 
 if __name__ == '__main__':
     args = docopt(__doc__, version='fix.py 0.1.0a')
