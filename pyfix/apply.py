@@ -163,48 +163,48 @@ def apply(funcname,
         nb.save(img, outname)
 
 
-if __name__ == "__main__":
-    PARSER = argparse.ArgumentParser(description="Apply FIX cleanup")
-
-    PARSER.add_argument('--motparams', default=None,
-                        help="Name of motion parameter file")
-    PARSER.add_argument('--outname', default=None,
-                        help="Name for cleaned func")
-    PARSER.add_argument('--sigma', default=None,
-                        help="Sigma (in volumes) for high-pass filter")
-    PARSER.add_argument('--TR', default=None,
-                        help="TR (required for giftii)")
-
-    PARSER.add_argument('--filt-func', dest='filtfunc', action='store_true')
-    PARSER.add_argument('--no-filt-func', dest='filtfunc',
-                        action='store_false')
-    PARSER.set_defaults(filtfunc=False)
-
-    PARSER.add_argument('--filt-motparams', dest='filtmotparams',
-                        action='store_true')
-    PARSER.add_argument('--no-filt-motparams', dest='filtmotparams',
-                        action='store_false')
-    PARSER.set_defaults(filtmotparams=True)
-
-    REQD = PARSER.add_argument_group('required arguments')
-    REQD.add_argument('--func', help='Func file name', required=True)
-    REQD.add_argument('--mix', help='Melodic mixing matric (melodic_mix)',
-                      required=True)
-    REQD.add_argument('--classification', help='Fix classification file',
-                      required=True)
-
-    ARGS = PARSER.parse_args()
-
-    # CMD = 'tail -n 1 ' + ARGS.classification
-    # DDREMOVE = util.shrun(CMD).lstrip('[').rstrip(']').replace(" ", "")
-    # DDREMOVE = np.fromstring(DDREMOVE, dtype=int, sep=",")
-
-    with open(ARGS.classification) as F:
-        DDREMOVE = F.read().splitlines()
-    DDREMOVE = DDREMOVE[-1].lstrip('[').rstrip(']').replace(" ", "")
-    DDREMOVE = np.fromstring(DDREMOVE, dtype=int, sep=",")
-
-    apply(ARGS.func, ARGS.mix, DDREMOVE, sigma=ARGS.sigma,
-          motparams=ARGS.motparams, filt_func=ARGS.filtfunc,
-          filt_motparams=ARGS.filtmotparams, outname=ARGS.outname,
-          func_tr=ARGS.TR)
+# if __name__ == "__main__":
+#     PARSER = argparse.ArgumentParser(description="Apply FIX cleanup")
+#
+#     PARSER.add_argument('--motparams', default=None,
+#                         help="Name of motion parameter file")
+#     PARSER.add_argument('--outname', default=None,
+#                         help="Name for cleaned func")
+#     PARSER.add_argument('--sigma', default=None,
+#                         help="Sigma (in volumes) for high-pass filter")
+#     PARSER.add_argument('--TR', default=None,
+#                         help="TR (required for giftii)")
+#
+#     PARSER.add_argument('--filt-func', dest='filtfunc', action='store_true')
+#     PARSER.add_argument('--no-filt-func', dest='filtfunc',
+#                         action='store_false')
+#     PARSER.set_defaults(filtfunc=False)
+#
+#     PARSER.add_argument('--filt-motparams', dest='filtmotparams',
+#                         action='store_true')
+#     PARSER.add_argument('--no-filt-motparams', dest='filtmotparams',
+#                         action='store_false')
+#     PARSER.set_defaults(filtmotparams=True)
+#
+#     REQD = PARSER.add_argument_group('required arguments')
+#     REQD.add_argument('--func', help='Func file name', required=True)
+#     REQD.add_argument('--mix', help='Melodic mixing matric (melodic_mix)',
+#                       required=True)
+#     REQD.add_argument('--classification', help='Fix classification file',
+#                       required=True)
+#
+#     ARGS = PARSER.parse_args()
+#
+#     # CMD = 'tail -n 1 ' + ARGS.classification
+#     # DDREMOVE = util.shrun(CMD).lstrip('[').rstrip(']').replace(" ", "")
+#     # DDREMOVE = np.fromstring(DDREMOVE, dtype=int, sep=",")
+#
+#     with open(ARGS.classification) as F:
+#         DDREMOVE = F.read().splitlines()
+#     DDREMOVE = DDREMOVE[-1].lstrip('[').rstrip(']').replace(" ", "")
+#     DDREMOVE = np.fromstring(DDREMOVE, dtype=int, sep=",")
+#
+#     apply(ARGS.func, ARGS.mix, DDREMOVE, sigma=ARGS.sigma,
+#           motparams=ARGS.motparams, filt_func=ARGS.filtfunc,
+#           filt_motparams=ARGS.filtmotparams, outname=ARGS.outname,
+#           func_tr=ARGS.TR)
