@@ -8,8 +8,13 @@ FIX attempts to auto-classify ICA components into "good" vs "bad" components, so
 
 ## Installation
 ```shell
-# install development version
+# install development version from gitlab with pip
 pip install git+https://git.fmrib.ox.ac.uk/seanf/pyfix.git
+
+# OR, clone locally and install with pip
+git clone https://git.fmrib.ox.ac.uk/seanf/pyfix.git
+pip install -e pyfix
+
 ```
 
 ## Usage
