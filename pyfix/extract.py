@@ -98,6 +98,7 @@ def extract_features(fixdir: str,
     nIC = ic_map.shape[3]
 
     # TODO: provide a workdir (fixdir+funcname) for storing feature assets with collision
+    # TODO: this should be a dataclass
     data = {
         'nIC': nIC,
         'func': func,

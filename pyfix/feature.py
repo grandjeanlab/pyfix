@@ -559,8 +559,11 @@ def zstattofuncratio(data):
     # % and/or the original PCA residual image
     # % global icThreshold;
 
+    defaults = DEFAULTS.update(workdir=data['fixdir'])
+
     icmap = data['ic_map']
-    func_mean = data['func_mean']
+    # func_mean = data['func_mean']
+    func_mean = _calc_func_mean(data['func'], defaults.get('func_mean', make_dir=True))
 
     workdir = op.dirname(icmap.get_filename())
 
@@ -822,8 +825,26 @@ def smoothest(data):
 @feature_extractor
 def spatialoverlap(data):
 
+    func = data['func']
+    struct_dseg = data['struct_dseg']
+    struct2func_xfm = data['struct2func_xfm']
+    fixdir = data['fixdir']
+
+    # TODO: should not use filetree here.  filetree should be reserved for outputs that are guaranteed.
+    defaults = DEFAULTS.update(workdir=fixdir)
+
+    func_mean = _calc_func_mean(func, defaults.get('func_mean', make_dir=True))
+
+    seg = _apply_xfm(
+        src=struct_dseg,
+        ref=func_mean,
+        xfm=struct2func_xfm,
+        interp='nearestneighbour',
+        out_name=defaults.get('func_dseg', make_dir=True)
+    )
+
     icmap_abs = data['ic_map_abs'].get_fdata()
-    seg = data['func_dseg'].get_fdata()
+    seg = seg.get_fdata()
     pixdim = data['pixdim']
 
     eps = np.finfo(float).eps
