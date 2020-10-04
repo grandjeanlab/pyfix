@@ -18,6 +18,54 @@ import pandas as pd
 log = logging.getLogger(__name__)
 DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
+
+def from_feat_dir(featdir: str):
+    return from_melodic_dir(featdir)
+
+
+def from_melodic_dir(meldir: str):
+    args = {
+        'func': op.join(meldir, 'filtered_func_data.nii.gz'),
+        'func_brainmask': op.join(meldir, 'mask.nii.gz'),
+        'struct': op.join(meldir, 'reg/highres.nii.gz'),
+        'struct2func_xfm': op.join(meldir, 'reg/highres2example_func.mat')
+
+    }
+
+    util.assert_file_exists(*(args.values()))
+
+    struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
+    struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+
+    if op.exists(struct_fast_seg):
+        args['struct_dseg'] = struct_fast_seg
+        args['struct_dseg_type'] = SegType.fsl_fast
+
+    if op.exists(struct_fs_wmparc):
+        args['struct_dseg'] = struct_fs_wmparc
+        args['struct_dseg_type'] = SegType.freesurfer_wmparc
+
+    std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+    std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+
+    if op.exists(std2func_mat):
+        args['standard2func_xfm'] = std2func_mat
+
+    if op.exists(std2func_warp):
+        args['standard2func_xfm'] = std2func_warp
+
+    args['ic_timeseries'] = op.join(
+        meldir, 'filtered_func_data.ica', 'melodic_mix')
+    args['ic_map'] = op.join(
+        meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz')
+
+    args['mot_param'] = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
+
+    fixdir = op.join(meldir, 'pyfix')
+
+    return extract_features(fixdir=fixdir, **args)
+
+
 def extract_features(fixdir: str,
                      func: str,  # native functional space
                      struct2func_xfm: str,  # native structural to native functional space xfm (warp or affine)
@@ -61,9 +109,19 @@ def extract_features(fixdir: str,
 
     # prepare func_dseg and transform to func space
 
-    # TODO: segment structural if struct_dseg is not provided
+    # TODO: move to feature with caching
     if struct_dseg is None:
-        raise RuntimeError('Currently struct_dseg is always required. Will change in future.')
+        log.info('Creating structural segmentation with FSL FAST')
+
+        if not op.exists(fixdir):
+            os.makedirs(fixdir)
+
+        util.run([
+            'fast', '-t', '1', '-o',
+            op.join(fixdir, 'fastsg'),
+            struct,
+        ])
+        struct_dseg = op.join(fixdir, 'fastsg_pveseg.nii.gz')
 
     # TODO: add support for freesurfer wmparc
     if struct_dseg_type is not SegType.fsl_fast:
@@ -163,3 +221,41 @@ def extract_features(fixdir: str,
 
 def _index_img(img, idx):
     return nb.Nifti1Image(img.get_fdata()[:, :, :, idx], img.affine, img.header)
+
+# def _apply_fast(
+#         self,
+#         struct: nb.Nifti1Image,
+#         struct_seg_type,
+#         struct_seg: nb.Nifti1Image,
+#         func: nb.Nifti1Image,
+#         struct2func_rigid: str) -> None:
+#
+#     # create structual segmentation if it does not exist
+#     if struct_seg is None:
+#         log.info('Creating structural segmentation with FSL FAST')
+#         util.run([
+#             'fast', '-t', '1', '-o',
+#             op.join(self.workdir, 'fastsg'),
+#             struct.get_filename()
+#         ])
+#         struct_seg = nb.load(op.join(self.workdir, 'fastsg_pveseg.nii.gz'))
+#
+#     # TODO: add support for freesurfer wmparc
+#     assert struct_seg_type is SegType.fsl_fast, (
+#         'Segmentation type not currently supported')
+#
+#     # transform structural segmentation to native functional space
+#     log.info('Transform structural segmentation to native functional space')
+#     func_seg = op.join(self.workdir, 'func_seg.nii.gz')
+#     util.run([
+#         'flirt',
+#         '-in', struct_seg.get_filename(),
+#         '-ref', func.get_filename(),
+#         '-applyxfm',
+#         '-init', struct2func_rigid,
+#         '-interp', 'nearestneighbour',
+#         '-out', func_seg
+#     ])
+#     func_seg = nb.load(func_seg)
+#
+#     return func_seg
