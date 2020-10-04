@@ -35,15 +35,16 @@ def from_melodic_dir(meldir: str):
     util.assert_file_exists(*(args.values()))
 
     struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
-    struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+    # struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
 
     if op.exists(struct_fast_seg):
         args['struct_dseg'] = struct_fast_seg
         args['struct_dseg_type'] = SegType.fsl_fast
 
-    if op.exists(struct_fs_wmparc):
-        args['struct_dseg'] = struct_fs_wmparc
-        args['struct_dseg_type'] = SegType.freesurfer_wmparc
+    # TODO: add support for wmparc
+    # if op.exists(struct_fs_wmparc):
+    #     args['struct_dseg'] = struct_fs_wmparc
+    #     args['struct_dseg_type'] = SegType.freesurfer_wmparc
 
     std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
     std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
