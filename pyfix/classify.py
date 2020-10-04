@@ -88,9 +88,6 @@ def train(table: pd.DataFrame,
     if loo:
         Y, CM = _cvloo(clf, X, y, group, n_jobs=-2)
 
-        # print(len(Y), len(CM), CM[0].shape)
-        # print(Y[:10])
-
         TPR = np.array([__TPR(m) for m in CM])
         TNR = np.array([__TNR(m) for m in CM])
         M = ((3 * TPR) + TNR) / 4
@@ -132,14 +129,7 @@ def _cvloo(clf, X, y, l, n_jobs=1):
     CM = [cm for _, cm, _ in blocks]
     test = np.concatenate([tst for _, _, tst in blocks])
 
-    # print(Y.shape)
-
-    # print(Y[:10])
-    # print(test[:10])
-
     Y = Y[test]
-
-    # print(Y.shape)
 
     return Y, CM
 
