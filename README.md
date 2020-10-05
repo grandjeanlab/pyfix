@@ -4,7 +4,7 @@ This package contains a python port of [FMRIB's ICA-based Xnoiseifier](https://f
 
 FIX attempts to auto-classify ICA components into "good" vs "bad" components, so that the bad components can be removed from the 4D FMRI data. FIX is intended to be run on single-session [MELODIC](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/MELODIC) ICA output. 
 
-> This python port attempts to emulate `FIX` as closely as possible but is *not* are like-for-like replacement.  The primary difference is that the ensemble classifier that was used in `FIX` and was implemented in `R` is *not* used by `pyFIX`.  Instead we allow the user to use any classifier that conforms to the scikit-learn classifier API.  We may, at a later stage, implement an ensemble classifier in `pyFIX` that is inspired by the classifier in `FIX`.
+> This python port attempts to emulate `FIX` as closely as possible but is *not* a like-for-like replacement.  The primary difference is that the ensemble classifier that was used in `FIX`, and was implemented in `R`, is *not* used by `pyFIX`.  Instead we allow the user to use any classifier that conforms to the [scikit-learn](https://scikit-learn.org/stable/) classifier API.  We may, at a later stage, implement an ensemble classifier in `pyFIX` that is inspired by the classifier in `FIX`.
 
 ## Installation
 ```shell
