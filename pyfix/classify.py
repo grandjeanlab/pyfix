@@ -12,7 +12,7 @@ from sklearn import pipeline
 from sklearn import preprocessing
 from sklearn import metrics
 
-from sklearn.externals.joblib import Parallel, delayed
+from joblib import Parallel, delayed
 
 from sklearn import svm as svm, ensemble, neighbors, tree, neural_network as nn
 
