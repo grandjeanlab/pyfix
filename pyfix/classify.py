@@ -40,7 +40,7 @@ def classify(features, clf):
     return Y
 
 
-def collate_features(table: Union[str, pd.DataFrame]):
+def collate_features(table: Union[str, pd.DataFrame], legacy_features=False):
     if isinstance(table, str):
         table = io.read_file_table(table)
 
@@ -50,7 +50,11 @@ def collate_features(table: Union[str, pd.DataFrame]):
 
     for idx, (f0, l0, g0) in enumerate(zip(table.features, table.labels, table.subid)):
 
-        train_data[idx] = legacy.read_features(f0)
+        if legacy_features:
+            train_data[idx] = legacy.read_features(f0)
+        else:
+            train_data[idx] = io.read_features(f0)
+
         train_data[idx]['group'] = g0
 
         l1 = np.zeros(train_data[idx].shape[0])
