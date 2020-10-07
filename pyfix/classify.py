@@ -31,7 +31,7 @@ def classify(features, clf):
         *[f'dim:{i}' for i in np.arange(4)],
     ]
 
-    X = table.drop(columns=drop_cols).values
+    X = table.drop(columns=drop_cols, errors='ignore').values
 
     Y = clf.predict(X)
 
