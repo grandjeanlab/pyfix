@@ -82,7 +82,7 @@ def train(table: pd.DataFrame,
         'group',
     ]
 
-    X = table.drop(columns=drop_cols).values
+    X = table.drop(columns=drop_cols, errors='ignore').values
     y = table['label'].astype(int).values
     group = table['group'].values
 
