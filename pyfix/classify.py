@@ -22,8 +22,13 @@ from sklearn.model_selection import cross_validate as cv, LeaveOneGroupOut
 
 log = logging.getLogger(__name__)
 
-def classify(features, clf):
-    table = legacy.read_features(features)
+
+def classify(features, clf, legacy_features=False):
+
+    if legacy_features:
+        table = legacy.read_features(features)
+    else:
+        table = io.read_features(features)
 
     drop_cols = [
         'nic',
