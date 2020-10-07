@@ -23,12 +23,12 @@ from sklearn.model_selection import cross_validate as cv, LeaveOneGroupOut
 log = logging.getLogger(__name__)
 
 
-def classify(features, clf, legacy_features=False):
+def classify(feature_table, clf):
 
-    if legacy_features:
-        table = legacy.read_features(features)
-    else:
-        table = io.read_features(features)
+    # if legacy_features:
+    #     table = legacy.read_features(features)
+    # else:
+    #     table = io.read_features(features)
 
     drop_cols = [
         'nic',
@@ -36,7 +36,7 @@ def classify(features, clf, legacy_features=False):
         *[f'dim:{i}' for i in np.arange(4)],
     ]
 
-    X = table.drop(columns=drop_cols, errors='ignore').values
+    X = feature_table.drop(columns=drop_cols, errors='ignore').values
 
     Y = clf.predict(X)
 
