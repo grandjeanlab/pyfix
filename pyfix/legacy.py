@@ -66,3 +66,13 @@ def generate_file_table(*args):
     )
 
     return d
+
+def read_labels(filename: str):
+    """Read legacy label files, melview and hand_labels_noise.txt"""
+
+    with open(filename, 'r') as f:
+        labels = f.readlines()[-1]
+
+    labels = np.fromstring(labels.strip('[]\n'), sep=',', dtype=int)
+
+    return labels
