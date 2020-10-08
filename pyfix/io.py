@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import pandas as pd
+import joblib
 
 def read_file_table(filename):
     """Read a table of files for training.
@@ -24,3 +25,34 @@ def read_features(filename: str):
 
     """
     return pd.read_csv(filename)
+
+
+def load_model(fname):
+    """
+    Load pyFIX model.
+
+    Args:
+        fname:
+
+    Returns:
+
+    """
+    return joblib.load(fname)
+
+
+def save_model(fname, mdl):
+    """
+    Save pyFIX model.
+
+    Args:
+        fname:
+        mdl:
+
+    Returns:
+
+    """
+
+    if not fname.endswith('.pyfix-model'):
+        fname = fname + '.pyfix-model'
+
+    joblib.dump(mdl, fname)
