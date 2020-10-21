@@ -66,7 +66,8 @@ def from_melodic_dir(meldir: str):
 
     return extract_features(fixdir=fixdir, **args)
 
-
+# TODO: only ica_map and ica_timeseries should be req'd
+# TODO: fmri (currently func), eeg, and meg should all be options
 def extract_features(fixdir: str,
                      func: str,  # native functional space
                      struct2func_xfm: str,  # native structural to native functional space xfm (warp or affine)
@@ -96,6 +97,9 @@ def extract_features(fixdir: str,
     # update defaults
     defaults = DEFAULTS.update(workdir=fixdir)
 
+    if not op.exists(fixdir):
+        os.makedirs(fixdir)
+
     # demean func if necessary
     # if func_mean is None:
     #     fslmaths(func).Tmean().run(defaults.get('func_mean', make_dir=True))
@@ -113,9 +117,6 @@ def extract_features(fixdir: str,
     # TODO: move to feature with caching
     if struct_dseg is None:
         log.info('Creating structural segmentation with FSL FAST')
-
-        if not op.exists(fixdir):
-            os.makedirs(fixdir)
 
         util.run([
             'fast', '-t', '1', '-o',
