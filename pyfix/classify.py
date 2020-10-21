@@ -128,7 +128,7 @@ def _cvloo(clf, X, y, l, n_jobs=1):
 
     pipe = pipeline.make_pipeline(preprocessing.StandardScaler(), clf)
 
-    print("TPR\tTNR")
+    # print("TPR\tTNR")
 
     par = Parallel(n_jobs=n_jobs)
     blocks = par(delayed(__fit_and_predict)(clone(pipe), X, y, l, train, test)
@@ -148,8 +148,8 @@ def __fit_and_predict(estimator, X, y, l, train, test):
     estimator.fit(X_trn, y_trn)
     Y = estimator.predict(X_tst)
     CM = metrics.confusion_matrix(y_tst, Y)
-    print("{0:0.2f}\t{1:0.2f}".format(__TPR(CM) * 100,
-                                      __TNR(CM) * 100))
+    # print("{0:0.2f}\t{1:0.2f}".format(__TPR(CM) * 100,
+    #                                   __TNR(CM) * 100))
 
     return Y, CM, test
 
