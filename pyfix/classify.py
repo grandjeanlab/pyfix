@@ -17,8 +17,9 @@ from joblib import Parallel, delayed
 from sklearn import svm as svm, ensemble, neighbors, tree, neural_network as nn
 
 from sklearn.base import clone
-from sklearn.model_selection import cross_validate as cv, LeaveOneGroupOut
-# from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.model_selection import cross_validate as cv, LeaveOneGroupOut, cross_val_predict, LeaveOneOut
+from sklearn.base import BaseEstimator, ClassifierMixin
+
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +95,8 @@ def train(table: pd.DataFrame,
     if clf is None:
         clf = svm.SVC(probability=False, class_weight="balanced", gamma='scale')
 
+    CM = None
+
     if loo:
         Y, CM = _cvloo(clf, X, y, group, n_jobs=-2)
 
@@ -119,7 +122,7 @@ def train(table: pd.DataFrame,
         print("Pooled confusion matrix:")
         print(CM0)
 
-    return clf.fit(X, y)
+    return clf.fit(X, y), CM
 
 
 def _cvloo(clf, X, y, l, n_jobs=1):
@@ -157,18 +160,14 @@ def __fit_and_predict(estimator, X, y, l, train, test):
 def __metric(cm):
     return __TPR(cm), __TNR(cm)
 
-
 def __TNR(cm):
     return cm[1, 1] / np.sum(cm[1, :])
-
 
 def __TPR(cm):
     return cm[0, 0] / np.sum(cm[0, :])
 
 
-
-
-# class FixClassifier(BaseEstimator, ClassifierMixin):
+# class FixLegacyClassifier(BaseEstimator, ClassifierMixin):
 #     """FMRIB's ICA-based Xnoiseifier."""
 #
 #     def __init__(self, n_jobs=1):
@@ -180,40 +179,41 @@ def __TPR(cm):
 #         #     loo = cv.StratifiedKFold(y, n_folds=5)
 #         # else:
 #         #     loo = cv.LeaveOneLabelOut(labels)
-#         loo = LeaveOneGroupOut()
+#         loo = LeaveOneOut()
+#
 #
 #         self.classes_, indices = np.unique(y, return_inverse=True)
 #
 #         # SVM - RBF
 #         self.base1 = svm.SVC(probability=True, class_weight="balanced",
-#                              kernel='rbf')
-#         Y1 = cv.cross_val_predict(self.base1, X, y, cv=loo, verbose=1,
+#                              kernel='rbf', gamma='scale')
+#         Y1 = cross_val_predict(self.base1, X, y, cv=loo, verbose=1,
 #                                   n_jobs=self.n_jobs)
 #         self.base1.fit(X, y)
 #
 #         # SVM - Linear
 #         self.base2 = svm.SVC(probability=True, class_weight="balanced",
 #                              kernel='linear')
-#         Y2 = cv.cross_val_predict(self.base2, X, y, cv=loo, verbose=1,
+#         Y2 = cross_val_predict(self.base2, X, y, cv=loo, verbose=1,
 #                                   n_jobs=self.n_jobs)
 #         self.base2.fit(X, y)
 #
 #         # SVM - polynomial
 #         self.base3 = svm.SVC(probability=True, class_weight="balanced",
 #                              kernel='poly')
-#         Y3 = cv.cross_val_predict(self.base3, X, y, cv=loo, verbose=1,
+#         Y3 = cross_val_predict(self.base3, X, y, cv=loo, verbose=1,
 #                                   n_jobs=self.n_jobs)
 #         self.base3.fit(X, y)
 #
 #         # k-NN
 #         self.base4 = neighbors.KNeighborsClassifier()
-#         Y4 = cv.cross_val_predict(self.base4, X, y, cv=loo, verbose=1,
+#         Y4 = cross_val_predict(self.base4, X, y, cv=loo, verbose=1,
 #                                   n_jobs=self.n_jobs)
 #         self.base4.fit(X, y)
 #
 #         # decision tree
 #         self.base5 = tree.DecisionTreeClassifier()
-#         Y5 = cv.cross_val_predict(self.base5, X, y, cv=loo, verbose=1,
+#         Y5 = cross_val_predict(self.base5, X, y, cv=loo, verbose=1,
 #                                   n_jobs=self.n_jobs)
 #         self.base5.fit(X, y)
 #
