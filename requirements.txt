@@ -6,3 +6,4 @@ fslpy
 pandas
 spectrum
 sklearn
+cachetools
