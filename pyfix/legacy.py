@@ -3,32 +3,32 @@ import pandas as pd
 import numpy as np
 import os.path as op
 
-FEATURE_LABELS = [
+LEGACY_FEATURE_LABELS = [
     'nic',
     *[f'arvswgn:{i}' for i in np.arange(2)],
     *[f'arfull:{i}' for i in np.arange(5)],
     'skewness',
     'kurtosis',
-    'mean-median',
+    'mean_median',
     *[f'entropy:{i}' for i in np.arange(2)],
     *[f'tsjump:{i}' for i in np.arange(6)],
     *[f'fftcoarse:{i}' for i in np.arange(4)],
     *[f'fftfiner:{i}' for i in np.arange(7)],
     *[f'fftfinerwrtnull:{i}' for i in np.arange(8)],
     *[f'motioncorrelation:{i}' for i in np.arange(6)],
-    *[f'abs_oupjk:{i}' for i in np.arange(2)],
+    *[f'oupjk:{i}' for i in np.arange(2)],
     *[f'clusterdist:{i}' for i in np.arange(9)],
     *[f'negativevspositive:{i}' for i in np.arange(6)],
     *[f'zstattofuncratio:{i}' for i in np.arange(4)],
     *[f'slicewisestats:{i}' for i in np.arange(4)],
     *[f'everynthvariance:{i}' for i in np.arange(4)],
     *[f'masktscorrandoverlap:{i}' for i in np.arange(12)],
-    'smoothest',
+    'smoothest:0',
     'spatialoverlap',
     *[f'maxtfce:{i}' for i in np.arange(3)],
     *[f'edgemasks:{i}' for i in np.arange(15)],
     *[f'sagmasks:{i}' for i in np.arange(72)],
-    'stripe',
+    'stripe:0',
     *[f'dim:{i}' for i in np.arange(4)],
     *[f'pixdim:{i}' for i in np.arange(4)],
 ]
@@ -44,7 +44,7 @@ def read_features(filename: str):
         features table (pd.DataFrame):
     
     """
-    return pd.read_csv(filename, header=None, names=FEATURE_LABELS)
+    return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
 
 
 def generate_file_table(*args):
