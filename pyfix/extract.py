@@ -11,13 +11,16 @@ from pyfix.util import SegType
 from pyfix import util
 from fsl.data.image import Image
 from fsl.wrappers import bet, fslmaths, flirt
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Type
 from fsl.utils.filetree import FileTree
 import pandas as pd
 from dataclasses import dataclass, field
 from scipy import io
 from collections import namedtuple
 from fsl.data import featanalysis
+from cachetools import cached, cachedmethod
+from cachetools.keys import hashkey
+from functools import lru_cache
 
 IC = namedtuple('IC', ['map', 'timeseries'])
 
@@ -25,116 +28,302 @@ log = logging.getLogger(__name__)
 DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
 
-def from_feat_dir(featdir: str):
-    return from_melodic_dir(featdir)
+@dataclass
+class SpatialMap:
+    """Container for spatial map data."""
+    data: np.ndarray
+
+    # def __init__(self, data: np.ndarray):
+    #     self._data = data
+
+    # @property
+    # def data(self):
+    #     return self._data
+
+    @property
+    def nmap(self) -> int:
+        return self.data.shape[-1]
+
+    @property
+    def nspace(self) -> int:
+        return np.prod(self.data.shape[:-1])
+
+    @property
+    def shape(self) -> tuple:
+        return self.data.shape
+
+    def get_map(self, idx) -> np.ndarray:
+        map0 = self.data[..., idx]
+        return map0
 
 
-def from_melodic_dir(meldir: str):
-    args = {
-        'func': op.join(meldir, 'filtered_func_data.nii.gz'),
-        'func_brainmask': op.join(meldir, 'mask.nii.gz'),
-        'struct': op.join(meldir, 'reg/highres.nii.gz'),
-        'struct2func_xfm': op.join(meldir, 'reg/highres2example_func.mat')
+@dataclass
+class NiftiMap(SpatialMap):
+    """SpatialMap subclass container for NIFTI spatial maps"""
+    data: nb.Nifti1Image
+    xfm: Optional[str] = None
 
-    }
+    @cached(cache={}, key=lambda self, idx: hashkey(id(self), idx))
+    def get_map(self, idx) -> nb.Nifti1Image:
+        # print(f'get_map: {idx}')
+        dd = self.data.get_fdata()[..., idx]
+        return nb.Nifti1Image(dd, affine=self.data.affine, header=self.data.header)
 
-    util.assert_file_exists(*(args.values()))
+    def to_filename(self, fname: str) -> str:
+        self.data.to_filename(fname)
+        return fname
 
-    struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
-    # struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+    # def get_data(self, idx, unfold=False) -> np.ndarray:
+    #     map0 = self.data.get_fdata()[..., idx]
+    #     if unfold:
+    #         map0 = map0.ravel()
+    #     return map0
 
-    if op.exists(struct_fast_seg):
-        args['struct_dseg'] = struct_fast_seg
-        args['struct_dseg_type'] = SegType.fsl_fast
-
-    # TODO: add support for wmparc
-    # if op.exists(struct_fs_wmparc):
-    #     args['struct_dseg'] = struct_fs_wmparc
-    #     args['struct_dseg_type'] = SegType.freesurfer_wmparc
-
-    std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
-    std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
-
-    if op.exists(std2func_mat):
-        args['standard2func_xfm'] = std2func_mat
-
-    if op.exists(std2func_warp):
-        args['standard2func_xfm'] = std2func_warp
-
-    args['ic_timeseries'] = op.join(
-        meldir, 'filtered_func_data.ica', 'melodic_mix')
-    args['ic_map'] = op.join(
-        meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz')
-
-    args['mot_param'] = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
-
-    fixdir = op.join(meldir, 'pyfix')
-
-    return extract_features(fixdir=fixdir, **args)
+    @property
+    def pixdim(self):
+        return self.data.header.get_zooms()
 
 
 @dataclass(frozen=True)
-class InputData:
-    """Container for input data."""
-    ic_timeseries: np.ndarray
-    ic_map: np.ndarray
-    fs: float
-    fixdir: str
-    data: Optional[np.ndarray] = None
-    standard2data_xfm: Optional[str] = None
-    timeseries: Optional[dict] = field(default_factory=dict)
-    hp_fwhm: Optional[float] = None
-    # TODO: make timeseries a namedtuple
-    map_pixdim: Optional[np.array] = None
+class TimeCourse:
+    """Container for timecourse data."""
+    data: np.ndarray     # frames (time) x channels
+    fs: float                   # sample rate (Hz)
 
     @property
     def tr(self) -> float:
-        return 1/self.fs
+        return 1 / self.fs
 
     @property
     def srate(self) -> float:
         return self.fs
 
     @property
-    def nic(self) -> int:
-        return self.ic_map.shape[-1]
+    def ntime(self) -> int:
+        return self.data.shape[0]
+
+    @property
+    def nchan(self) -> int:
+        return self.data.shape[1]
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    def get_timecourse(self, idx) -> np.ndarray:
+        return self.data[:, idx] if self.data.ndim > 1 else self.data[:, np.newaxis][:, idx]
+
+
+@dataclass(frozen=True)
+class NiftiTimeCourse(TimeCourse):
+    """TimeCourse subclass container for NIFTI timecourse data."""
+    data: nb.Nifti1Image
+    fs: float
+    xfm: Optional[str] = None
 
     @property
     def ntime(self) -> int:
-        return self.ic_timeseries.shape[0]
+        return self.data.shape[-1]
+
+    @property
+    def nchan(self) -> int:
+        return np.prod(self.data.shape[:-1])
+
+    def get_timecourse(self, idx) -> np.ndarray:
+        dd = self.data.get_fdata()
+        dd = np.reshape(dd, (-1, self.ntime))
+        return dd[idx, :]
+
+    # @cached(cache={}, key=lambda self: hashkey(id(self), 'get_tmean'))
+    # def get_tmean(self) -> nb.Nifti1Image:
+    #     print(f'get_nifti_timecourse_tmean')
+    #     dd = np.mean(self.data.get_fdata(), axis=-1)
+    #     return nb.Nifti1Image(dd, affine=self.data.affine, header=self.data.header)
+
+    @property
+    def pixdim(self):
+        return self.data.header.get_zooms()
+
+
+@dataclass(frozen=True)
+class Component:
+    """Container for single IC"""
+    spatialmap: np.ndarray
+    timecourse: np.ndarray
+    idx: int
+
+
+@dataclass(frozen=True)
+class ICA:
+    """Container for full ICA decomposition"""
+    maps: SpatialMap  # space[x,y,z] x ics
+    timecourses: TimeCourse  # time x ics
+
+    @property
+    def nic(self) -> int:
+        return self.maps.nmap
+
+    @property
+    def ntime(self) -> int:
+        return self.timecourses.ntime
 
     @property
     def nspace(self) -> int:
-        return np.prod(self.ic_map.shape[:-1])
+        return self.maps.nspace
 
     @property
-    def has_data(self) -> bool:
-        return self.data is not None
+    def tr(self) -> float:
+        return 1 / self.timecourses.fs
+
+    @property
+    def srate(self) -> float:
+        return self.timecourses.fs
+
+    def __post_init__(self):
+        spatial_nic = self.maps.nmap
+        temporal_nic = self.timecourses.nchan
+
+        assert spatial_nic == temporal_nic, \
+            f'The number of ICs in the spatial components ({spatial_nic}) and timeseries do not match ({temporal_nic}).'
 
     def get_ic(self, idx):
-        return IC(self.ic_map[..., idx], self.ic_timeseries[:, idx])
+        return Component(self.maps.get_map(idx), self.timecourses.get_timecourse(idx), idx)
 
-    def has(self, prop) -> bool:
-        return (hasattr(self, prop)) & (getattr(self, prop) is not None)
+    def get_timecourse(self, idx):
+        return self.timecourses.get_timecourse(idx)
+
+    def get_spatialmap(self, idx):
+        return self.maps.get_map(idx)
+
+
+
+@dataclass(frozen=True)
+class FixData:
+    """Container for FIX input data."""
+    fixdir: str
+    ica: ICA
+    input: Optional[Type[TimeCourse]] = None
+    timecourses: Optional[dict] = field(default_factory=dict)
+    spatialmaps: Optional[dict] = field(default_factory=dict)
+    hp_fwhm: Optional[float] = None
+
+    @property
+    def nic(self) -> int:
+        return self.ica.nic
 
     def __post_init__(self):
 
-        nic_maps = self.ic_map.shape[-1]
-        nic_ts = self.ic_timeseries.shape[1]
+        for k, v in self.timecourses.items():
+            assert v.srate == self.ica.srate, \
+                f'srate of {k} timecourse ({v.srate}) must equal ICA ({self.ica.srate})'
 
-        assert nic_maps == nic_ts, \
-            f'The number of ICs in the spatial maps ({nic_maps}) and timeseries do not match ({nic_ts}).'
+            assert v.ntime == self.ica.ntime, \
+                f'number time samples of {k} timecourse ({v.ntime}) must equal ICA ({self.ica.ntime})'
 
-        # if self.has_data:
-        #     assert self.data.shape[0] == self.ntime, \
-        #         f'The number of time samples in the data ({self.data.shape[0]}) does not match the ic_timeseries ({self.ntime})'
-        #
-        #     assert self.data.shape[1] == self.nspace, \
-        #         f'The number of space samples in the data ({self.data.shape[1]}) does not match the ic_map ({self.nspace})'
+        # for k, v in self.spatialmaps.items():
+        #     assert v.nspace == self.ica.nspace, \
+        #         f'number spatial samples of {k} spatialmap ({v.nspace}) must equal ICA ({self.ica.nspace})'
 
-        for k, v in self.timeseries.items():
-            assert v.shape[0] == self.ntime, \
-                f'The number of time samples in timeseries {k} ({v.shape[0]}) does not match the ic_timeseries ({self.ntime})'
+        if self.input is not None:
+            assert self.input.ntime == self.ica.ntime, \
+                f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
+
+
+    @classmethod
+    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None):
+
+        # fixdir
+
+        if fixdir is None:
+            fixdir = op.join(meldir, 'pyfix')
+
+        # melodic data
+
+        func = nb.load(op.join(meldir, 'filtered_func_data.nii.gz'))
+        tr = func.header.get_zooms()[3]
+
+        func_brainmask = nb.load(op.join(meldir, 'mask.nii.gz'))
+
+        ic_timeseries = np.loadtxt(op.join(meldir, 'filtered_func_data.ica', 'melodic_mix'))
+        ic_map = nb.load(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz'))
+
+        struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
+        struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+
+        struct = nb.load(op.join(meldir, 'reg/highres.nii.gz'))
+        struct2func_xfm = op.join(meldir, 'reg/highres2example_func.mat')
+
+        #  structural segmentations
+
+        if ~op.exists(struct_fast_seg):
+            # TODO: move to feature with caching so it is only run JIT
+            log.info('Creating structural segmentation with FSL FAST')
+
+            util.run([
+                'fast', '-t', '1', '-o',
+                op.join(fixdir, 'fastsg'),
+                struct.get_filename(),
+            ])
+            struct_fast_seg = op.join(fixdir, 'fastsg_pveseg.nii.gz')
+
+        dseg = nb.load(struct_fast_seg)
+
+        # TODO: add support for wmparc
+        if op.exists(struct_fs_wmparc):
+            pass
+
+        # standard-to-func transforms
+
+        standard = nb.load(op.join(meldir, 'reg/standard.nii.gz'))
+        std2func_xfm = None
+
+        std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+        if op.exists(std2func_mat):
+            std2func_xfm = std2func_mat
+
+        std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+        if op.exists(std2func_warp):
+            std2func_xfm = std2func_warp
+
+        # highpass settings
+
+        fsf = featanalysis.loadSettings(meldir)
+
+        hp = None
+        if int(fsf['temphp_yn']) == 1:
+            hp = float(fsf['paradigm_hp'])
+
+        # motion parameters
+
+        mp = np.loadtxt(op.join(meldir, 'mc/prefiltered_func_data_mcf.par'))
+
+        # instantiate class
+
+        d = cls(
+            fixdir=fixdir,
+            ica=ICA(
+                maps=NiftiMap(ic_map),
+                timecourses=TimeCourse(ic_timeseries, fs=1/tr),
+            ),
+            timecourses={
+                'RotX': TimeCourse(mp[:, 0], fs=1/tr),
+                'RotY': TimeCourse(mp[:, 1], fs=1/tr),
+                'RotZ': TimeCourse(mp[:, 2], fs=1/tr),
+                'X': TimeCourse(mp[:, 3], fs=1/tr),
+                'Y': TimeCourse(mp[:, 4], fs=1/tr),
+                'Z': TimeCourse(mp[:, 5], fs=1/tr),
+            },
+            spatialmaps={
+                'dseg': NiftiMap(dseg, xfm=struct2func_xfm),
+                'brainmask': NiftiMap(func_brainmask),
+                'struct': NiftiMap(struct, xfm=struct2func_xfm),
+                'standard': NiftiMap(standard, xfm=std2func_xfm)
+            },
+            hp_fwhm=hp,
+            input=NiftiTimeCourse(func, fs=1/tr),
+        )
+
+        return d
 
     @classmethod
     def from_osl(cls, fname, fixdir=None):
@@ -167,111 +356,335 @@ class InputData:
         # instantiate class
 
         d = cls(
-            ic_map=ic_map,
-            ic_timeseries=ic_timeseries,
-            fs=srate,
-            timeseries={
-                'eog': eog,
-                'emg': emg,
-                'ecg': ecg,
-            },
             fixdir=fixdir,
+            ica=ICA(
+                maps=SpatialMap(ic_map),
+                timecourses=TimeCourse(ic_timeseries, fs=srate),
+            ),
+            timecourses={
+                'eog': TimeCourse(eog, fs=srate),
+                'ecg': TimeCourse(ecg, fs=srate),
+                'emg': TimeCourse(emg, fs=srate),
+            },
         )
 
         return d, labels
 
 
-    @classmethod
-    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str]=None):
-
-        func = nb.load(op.join(meldir, 'filtered_func_data.nii.gz'))
-        tr = func.header.get_zooms()[3]
-
-        ic_timeseries = np.loadtxt(op.join(meldir, 'filtered_func_data.ica', 'melodic_mix'))
-        ic_map = nb.load(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz'))
-
-        struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
-        struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
-
-        #  structural segmentations
-
-        if op.exists(struct_fast_seg):
-            # TODO: transform struct_fast_seg to func and add as dseg
-
-            pass
-
-            # func_mean = _calc_tmean(data.data)
-            # func_mean = save_map(func_mean, data.map_pixdim, op.join(data.fixdir, f'func_mean.nii.gz'))
-
-            # seg = feature._apply_xfm(
-            #     src=struct_fast_seg,
-            #     ref=func_mean,
-            #     xfm=struct2func_xfm,
-            #     interp='nearestneighbour',
-            #     out_name=defaults.get('func_dseg', make_dir=True)
-            # )
-
-        # TODO: add support for wmparc
-        if op.exists(struct_fs_wmparc):
-            pass
-
-        # standard-to-func transforms
-
-        xfm = None
-
-        std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
-        if op.exists(std2func_mat):
-            xfm = std2func_mat
-
-        std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
-        if op.exists(std2func_warp):
-            xfm = std2func_warp
-
-        # fixdir
-
-        if fixdir is None:
-            fixdir = op.join(meldir, 'pyfix')
-
-        # highpass settings
-
-        fsf = featanalysis.loadSettings(meldir)
-
-        hp = None
-        if int(fsf['temphp_yn']) == 1:
-            hp = float(fsf['paradigm_hp'])
-
-        # motion parameters
-
-        mp = np.loadtxt(op.join(meldir, 'mc/prefiltered_func_data_mcf.par'))
-
-        # instantiate class
-
-        d = cls(
-            fixdir=fixdir,
-            ic_map=ic_map.get_fdata(), #.reshape((-1, ic_map.shape[-1])),
-            ic_timeseries=ic_timeseries,
-            data=func.get_fdata(), #.reshape((-1, func.shape[-1])),
-            fs=1/tr,
-            timeseries={
-                'RotX': mp[:, 0],
-                'RotY': mp[:, 1],
-                'RotZ': mp[:, 2],
-                'X': mp[:, 3],
-                'Y': mp[:, 4],
-                'Z': mp[:, 5],
-            },
-            standard2data_xfm=xfm,
-            hp_fwhm=hp,
-            map_pixdim=func.header.get_zooms(),
-        )
-
-        return d
+# def from_feat_dir(featdir: str):
+#     return from_melodic_dir(featdir)
+#
+#
+# def from_melodic_dir(meldir: str):
+#     args = {
+#         'func': op.join(meldir, 'filtered_func_data.nii.gz'),
+#         'func_brainmask': op.join(meldir, 'mask.nii.gz'),
+#         'struct': op.join(meldir, 'reg/highres.nii.gz'),
+#         'struct2func_xfm': op.join(meldir, 'reg/highres2example_func.mat')
+#
+#     }
+#
+#     util.assert_file_exists(*(args.values()))
+#
+#     struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
+#     # struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+#
+#     if op.exists(struct_fast_seg):
+#         args['struct_dseg'] = struct_fast_seg
+#         args['struct_dseg_type'] = SegType.fsl_fast
+#
+#     # TODO: add support for wmparc
+#     # if op.exists(struct_fs_wmparc):
+#     #     args['struct_dseg'] = struct_fs_wmparc
+#     #     args['struct_dseg_type'] = SegType.freesurfer_wmparc
+#
+#     std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+#     std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+#
+#     if op.exists(std2func_mat):
+#         args['standard2func_xfm'] = std2func_mat
+#
+#     if op.exists(std2func_warp):
+#         args['standard2func_xfm'] = std2func_warp
+#
+#     args['ic_timeseries'] = op.join(
+#         meldir, 'filtered_func_data.ica', 'melodic_mix')
+#     args['ic_map'] = op.join(
+#         meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz')
+#
+#     args['mot_param'] = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
+#
+#     fixdir = op.join(meldir, 'pyfix')
+#
+#     return extract_features(fixdir=fixdir, **args)
 
 
+# # TODO: add get data mean, calculate when required, cache as appropriate
+# # TODO: add get ic_map_abs, calculate when required, cache as appropriate
+# # TODO: add maps in other spaces, with xfm to dataspace, only transform as required, cache as appropriate.
+# @dataclass(frozen=True)
+# class InputData:
+#     """Container for input data."""
+#     ic_timeseries: np.ndarray
+#     ic_map: np.ndarray
+#     fs: float
+#     fixdir: str
+#     data: Optional[np.ndarray] = None
+#     standard2data_xfm: Optional[str] = None
+#     timeseries: Optional[dict] = field(default_factory=dict)
+#     hp_fwhm: Optional[float] = None
+#     # TODO: make timeseries a namedtuple
+#     map_pixdim: Optional[np.array] = None
+#     _cache: dict = field(default_factory=dict, init=False)
+#
+#     #######
+#     # PROPERTIES
+#     #######
+#
+#     @property
+#     def tr(self) -> float:
+#         return 1/self.fs
+#
+#     @property
+#     def srate(self) -> float:
+#         return self.fs
+#
+#     @property
+#     def nic(self) -> int:
+#         return self.ic_map.shape[-1]
+#
+#     @property
+#     def ntime(self) -> int:
+#         return self.ic_timeseries.shape[0]
+#
+#     @property
+#     def nspace(self) -> int:
+#         return np.prod(self.ic_map.shape[:-1])
+#
+#     @property
+#     def has_data(self) -> bool:
+#         return self.data is not None
+#
+#     @property
+#     def ic_map_abs(self):
+#         if 'ic_map_abs' not in self._cache:
+#             self._cache['ic_map_abs'] = np.abs(self.ic_map)
+#         return self._cache['ic_map_abs']
+#
+#     @property
+#     def data_tmean(self):
+#         if 'data_tmean' not in self._cache:
+#             self._cache['data_tmean'] = np.mean(self.data, axis=-1) if self.has_data else None
+#         return self._cache['data_tmean']
+#
+#     #######
+#     # METHODS
+#     #######
+#
+#     def get_ic(self, idx):
+#         return IC(self.ic_map[..., idx], self.ic_timeseries[:, idx])
+#
+#     def get_ic_map(self, idx, nifti=False):
+#         icmap = self.ic_map[..., idx]
+#
+#         if nifti:
+#             fname = op.abspath(op.join(self.fixdir, f'icmap{idx}.nii.gz'))
+#             InputData.save_map(icmap, self.map_pixdim, fname)
+#             icmap = fname
+#
+#         return icmap
+#
+#     def get_ic_map_abs(self, idx, nifti=False):
+#         icmap = self.ic_map_abs[..., idx]
+#
+#         if nifti:
+#             fname = op.abspath(op.join(self.fixdir, f'icmap{idx}_abs.nii.gz'))
+#             InputData.save_map(icmap, self.map_pixdim, fname)
+#             icmap = fname
+#
+#         return icmap
+#
+#
+#     def has(self, prop) -> bool:
+#         return (hasattr(self, prop)) & (getattr(self, prop) is not None)
+#
+#     def __post_init__(self):
+#
+#         nic_maps = self.ic_map.shape[-1]
+#         nic_ts = self.ic_timeseries.shape[1]
+#
+#         assert nic_maps == nic_ts, \
+#             f'The number of ICs in the spatial maps ({nic_maps}) and timeseries do not match ({nic_ts}).'
+#
+#         if self.has_data:
+#             assert self.data.shape[-1] == self.ntime, \
+#                 f'The number of time samples in the data ({self.data.shape[-1]}) does not match the ic_timeseries ({self.ntime})'
+#
+#             # assert self.data.shape[1] == self.nspace, \
+#             #     f'The number of space samples in the data ({self.data.shape[1]}) does not match the ic_map ({self.nspace})'
+#
+#         for k, v in self.timeseries.items():
+#             assert v.shape[0] == self.ntime, \
+#                 f'The number of time samples in timeseries {k} ({v.shape[0]}) does not match the ic_timeseries ({self.ntime})'
+#
+#     #######
+#     # STATIC METHODS
+#     #######
+#
+#     @staticmethod
+#     @cached(cache={}, key=lambda map0, pixdim, fname: hashkey(map0.tostring(), pixdim, fname))
+#     def save_map(map0, pixdim, fname):
+#
+#         img = nb.Nifti1Image(np.array(map0), affine=np.eye(4))
+#
+#         print(f'save: {fname}')
+#
+#         pxd = img.header['pixdim']
+#         pxd[1:1 + len(pixdim)] = pixdim
+#
+#         img.header['pixdim'] = pxd
+#         img.to_filename(fname)
+#
+#     #######
+#     # CLASS METHODS
+#     #######
+#
+#     @classmethod
+#     def from_osl(cls, fname, fixdir=None):
+#
+#         ica = io.loadmat(fname)['ica']
+#
+#         # IC time courses [time x numICs]
+#         ic_timeseries = ica[0, 0]['tc']
+#
+#         # IC spatial maps [sensors x numICs]
+#         ic_map = ica[0, 0]['sm']
+#
+#         # sampling rate
+#         srate = ica[0, 0]['fsample'][0][0]
+#
+#         # EOG, EMG, ECG
+#         eog = ica[0, 0]['EOG'].T
+#         emg = ica[0, 0]['EMG'].T
+#         ecg = ica[0, 0]['ECG'].T
+#
+#         # component labels
+#         labels = ica[0, 0]['bad_components']
+#         labels = np.array(labels)
+#
+#         # fixdir
+#
+#         if fixdir is None:
+#             fixdir = op.join(op.splitext(fname)[0], 'pyfix')
+#
+#         # instantiate class
+#
+#         d = cls(
+#             ic_map=ic_map,
+#             ic_timeseries=ic_timeseries,
+#             fs=srate,
+#             timeseries={
+#                 'eog': eog,
+#                 'emg': emg,
+#                 'ecg': ecg,
+#             },
+#             fixdir=fixdir,
+#         )
+#
+#         return d, labels
+#
+#
+#     @classmethod
+#     def from_melodic_dir(cls, meldir: str, fixdir: Optional[str]=None):
+#
+#         func = nb.load(op.join(meldir, 'filtered_func_data.nii.gz'))
+#         tr = func.header.get_zooms()[3]
+#
+#         ic_timeseries = np.loadtxt(op.join(meldir, 'filtered_func_data.ica', 'melodic_mix'))
+#         ic_map = nb.load(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz'))
+#
+#         struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
+#         struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+#
+#         #  structural segmentations
+#
+#         if op.exists(struct_fast_seg):
+#             # TODO: transform struct_fast_seg to func and add as dseg
+#
+#             pass
+#
+#             # func_mean = _calc_tmean(data.data)
+#             # func_mean = save_map(func_mean, data.map_pixdim, op.join(data.fixdir, f'func_mean.nii.gz'))
+#
+#             # seg = feature._apply_xfm(
+#             #     src=struct_fast_seg,
+#             #     ref=func_mean,
+#             #     xfm=struct2func_xfm,
+#             #     interp='nearestneighbour',
+#             #     out_name=defaults.get('func_dseg', make_dir=True)
+#             # )
+#
+#         # TODO: add support for wmparc
+#         if op.exists(struct_fs_wmparc):
+#             pass
+#
+#         # standard-to-func transforms
+#
+#         xfm = None
+#
+#         std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+#         if op.exists(std2func_mat):
+#             xfm = std2func_mat
+#
+#         std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+#         if op.exists(std2func_warp):
+#             xfm = std2func_warp
+#
+#         # fixdir
+#
+#         if fixdir is None:
+#             fixdir = op.join(meldir, 'pyfix')
+#
+#         # highpass settings
+#
+#         fsf = featanalysis.loadSettings(meldir)
+#
+#         hp = None
+#         if int(fsf['temphp_yn']) == 1:
+#             hp = float(fsf['paradigm_hp'])
+#
+#         # motion parameters
+#
+#         mp = np.loadtxt(op.join(meldir, 'mc/prefiltered_func_data_mcf.par'))
+#
+#         # instantiate class
+#
+#         d = cls(
+#             fixdir=fixdir,
+#             ic_map=ic_map.get_fdata(), #.reshape((-1, ic_map.shape[-1])),
+#             ic_timeseries=ic_timeseries,
+#             data=func.get_fdata(), #.reshape((-1, func.shape[-1])),
+#             fs=1/tr,
+#             timeseries={
+#                 'RotX': mp[:, 0],
+#                 'RotY': mp[:, 1],
+#                 'RotZ': mp[:, 2],
+#                 'X': mp[:, 3],
+#                 'Y': mp[:, 4],
+#                 'Z': mp[:, 5],
+#             },
+#             standard2data_xfm=xfm,
+#             hp_fwhm=hp,
+#             map_pixdim=func.header.get_zooms(),
+#         )
+#
+#         return d
 
-def new_extract_features(data: InputData,
+
+
+def new_extract_features(data: FixData,
                          features: List[str],
-                         fixdir: Optional[str]=None,
+                         # fixdir: Optional[str]=None,
                          feature_fname: Optional[str] = None,
                          ):
 
@@ -279,11 +692,11 @@ def new_extract_features(data: InputData,
 
     # setup fixdir
 
-    if fixdir is None:
-        fixdir = data.fixdir
+    # if fixdir is not None:
+    #     data.fixdir = fixdir
 
-    if not op.exists(fixdir):
-        os.makedirs(fixdir)
+    if not op.exists(data.fixdir):
+        os.makedirs(data.fixdir)
 
     # # update defaults
     # defaults = DEFAULTS.update(workdir=fixdir)
@@ -298,7 +711,7 @@ def new_extract_features(data: InputData,
     features = pd.concat(rows, axis=1).T
 
     if feature_fname is None:
-        feature_fname = op.join(fixdir, 'features.csv')
+        feature_fname = op.join(data.fixdir, 'features.csv')
 
     features.to_csv(feature_fname, index=None)
 
