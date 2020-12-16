@@ -264,10 +264,10 @@ def fftfinerwrtnull(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
     features_null = np.zeros(len(thres))
 
     for i in np.arange(100):
-        y = np.random.normal(0, 1, L)
+        y = np.random.randn(L)
         y = np.convolve(y, hrf)
         y = y[:L]
-        y = y / np.std(y)
+        y = y / np.std(y, ddof=1)
         yFft = np.abs(np.fft.fft(y, nFFT) / L)
         yFft = yFft[:f.shape[0]]
 
@@ -487,7 +487,7 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
     # % this feature tries to quantify the number of clusters in a component
 
     xSiz = data.ica.maps.pixdim[:-1]
-    fname = _get_ic_filename(data, ic_idx)
+    fname = _get_abs_ic_filename(data, ic_idx)
 
     cmd = ['cluster', '-i', fname, '-t', str(ic_threshold)]
 
