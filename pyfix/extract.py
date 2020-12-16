@@ -259,6 +259,9 @@ class FixData:
             # TODO: move to feature with caching so it is only run JIT
             log.info('Creating structural segmentation with FSL FAST')
 
+            if not op.exists(fixdir):
+                os.makedirs(fixdir)
+
             util.run([
                 'fast', '-t', '1', '-o',
                 op.join(fixdir, 'fastsg'),
