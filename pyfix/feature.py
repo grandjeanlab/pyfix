@@ -1093,7 +1093,7 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
     func_mean = nb.load(_get_data_tmean_filename(data))  # nifti
     struct = _get_map_with_tempname(data, 'struct')   # nifti
     struct2func_xfm = data.spatialmaps['struct'].xfm  # fname
-    standard2func_tx = data.spatialmaps['standard'].xfm  # fname
+    standard2func_tx = data.spatialmaps['standard'].xfm if 'standard' in data.spatialmaps else None # fname
 
     # icmap = data.ica.get_spatialmap(ic_idx).get_fdata()  # ndarray
     # icmap_abs = np.abs(icmap)  # ndarray
