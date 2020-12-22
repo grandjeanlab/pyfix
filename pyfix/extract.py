@@ -271,13 +271,13 @@ class FixData:
 
         dseg = nb.load(struct_fast_seg)
 
-        # TODO: add support for wmparc
+        # TODO: add support for wmparc (subcort seg)
         if op.exists(struct_fs_wmparc):
             pass
 
         # standard-to-func transforms
 
-        standard = nb.load(op.join(meldir, 'reg/standard.nii.gz'))
+        standard = op.join(meldir, 'reg/standard.nii.gz')
         std2func_xfm = None
 
         std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
@@ -320,11 +320,14 @@ class FixData:
                 'dseg': NiftiMap(dseg, xfm=struct2func_xfm),
                 'brainmask': NiftiMap(func_brainmask),
                 'struct': NiftiMap(struct, xfm=struct2func_xfm),
-                'standard': NiftiMap(standard, xfm=std2func_xfm)
+                # 'standard': NiftiMap(standard, xfm=std2func_xfm)
             },
             hp_fwhm=hp,
             input=NiftiTimeCourse(func, fs=1/tr),
         )
+
+        if op.exists(standard):
+            d.spatialmaps['standard'] = NiftiMap(standard, xfm=std2func_xfm)
 
         return d
 
