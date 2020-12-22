@@ -77,6 +77,16 @@ def nic(data, ic_idx):
 
 
 @feature_extractor
+def dim(data, ic_idx):
+    return list(data.input.data.shape)
+
+
+@feature_extractor
+def pixdim(data, ic_idx):
+    return list(data.input.data.header.get_zooms())
+
+
+@feature_extractor
 def arvswgn(data, ic_idx, norder=6):
     ts = data.ica.get_timecourse(ic_idx)
     mvec = np.zeros(norder)
@@ -402,7 +412,17 @@ def functionoupmle(S, deltat):
     Syy = np.sum(S[1:] ** 2)
 
     mu = (Sy * Sxx - Sx * Sxy) / (n * (Sxx - Sxy) - (Sx ** 2 - Sx * Sy))
-    lmbda = -(1 / deltat) * np.log((Sxy - mu * Sx - mu * Sy + n * mu ** 2) / (Sxx - 2 * mu * Sx + n * mu ** 2))
+
+    _log_val = (Sxy - mu * Sx - mu * Sy + n * mu ** 2) / (Sxx - 2 * mu * Sx + n * mu ** 2)
+    if _log_val < 0:
+        _log_val = complex(_log_val)
+
+    _log_val = np.log(_log_val)
+
+    # if isinstance(_log_val, complex):
+    #     _log_val = _log_val.real
+
+    lmbda = -(1 / deltat) * _log_val
 
     alpha = np.exp(-lmbda * deltat)
     alpha2 = np.exp(-2 * lmbda * deltat)
@@ -439,6 +459,9 @@ def _oupjk(S, deltat):
     # % Regressions prefer row vectors to column vectors, so rearrange if
     # % necessary.
 
+    # if S.shape[1] > S.shape[0]:
+    #     S = S.T
+
     m = 2  # number of partitions
     partlength = int(np.floor(np.max(S.shape) / m))
     Spart = np.zeros((m, partlength))
@@ -448,11 +471,12 @@ def _oupjk(S, deltat):
     [muT, sigmaT, lambdaT] = functionoupmle(S, deltat)
 
     # % Calculate the individual partitions.
-    mupart = np.zeros(m)
-    sigmapart = np.zeros(m)
-    lambdapart = np.zeros(m)
+    mupart = [None] * m #np.zeros(m)
+    sigmapart = [None] * m #np.zeros(m)
+    lambdapart = [None] * m #np.zeros(m)
     for i in np.arange(m):
         mupart[i], sigmapart[i], lambdapart[i] = functionoupmle(np.ravel(Spart[i, :]), deltat)
+
     # for i=1:1:m
     #     [mupart(i), sigmapart(i), lambdapart(i)] = functionoupmle(Spart(i,:), deltat);
     # end
