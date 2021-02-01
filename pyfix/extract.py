@@ -380,7 +380,7 @@ class FixData:
 def extract_features(data: FixData,
                          features: List[str],
                          # fixdir: Optional[str]=None,
-                         feature_fname: Optional[str] = None,
+                         # feature_fname: Optional[str] = None,
                          ):
 
     log.info("Extract features")
@@ -405,10 +405,10 @@ def extract_features(data: FixData,
 
     features = pd.concat(rows, axis=1).T
 
-    if feature_fname is None:
-        feature_fname = op.join(data.fixdir, 'features.csv')
-
-    features.to_csv(feature_fname, index=None)
+    # if feature_fname is None:
+    #     feature_fname = op.join(data.fixdir, 'features.csv')
+    #
+    # features.to_csv(feature_fname, index=None)
 
     return features
 
