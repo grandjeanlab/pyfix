@@ -122,7 +122,7 @@ def train(table: pd.DataFrame,
         print("Pooled confusion matrix:")
         print(CM0)
 
-    return clf.fit(X, y), CM
+    return clf.fit(X, y), CM, Y, y
 
 
 def _cvloo(clf, X, y, l, n_jobs=1):
@@ -141,7 +141,7 @@ def _cvloo(clf, X, y, l, n_jobs=1):
     CM = [cm for _, cm, _ in blocks]
     test = np.concatenate([tst for _, _, tst in blocks])
 
-    Y = Y[test]
+    Y = Y[np.argsort(test)]
 
     return Y, CM
 
