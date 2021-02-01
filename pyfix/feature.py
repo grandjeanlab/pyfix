@@ -63,12 +63,12 @@ def feature_extractor(func):
     return wrapper
 
 
-def read_legacy_features(fname):
-    return pd.read_csv(fname, header=None, names=LEGACY_FEATURE_LABELS)
-
-
-def save_legacy_features(d):
-    d[LEGACY_FEATURE_LABELS].to_csv(index=None)
+# def read_legacy_features(fname):
+#     return pd.read_csv(fname, header=None, names=LEGACY_FEATURE_LABELS)
+#
+#
+# def save_legacy_features(d):
+#     d[LEGACY_FEATURE_LABELS].to_csv(index=None)
 
 
 @feature_extractor
@@ -336,20 +336,20 @@ def hpfilt(func, sigma, tr):
 
         func_0 = func_0.reshape((10, 10, dim, n_t), order="F")
 
-        # TODO: should use a sensible tempname (and location)
-        tmpname = str(uuid.uuid4())
-        img = nb.Nifti1Image(func_0, np.eye(4))
-        nb.save(img, tmpname + ".nii.gz")
+        with TemporaryDirectory() as tmp:
+            tmpname = op.join(tmp, 'func')
+            img = nb.Nifti1Image(func_0, np.eye(4))
+            nb.save(img, tmpname + ".nii.gz")
 
-        util.run(['fslmodhd', tmpname + '.nii.gz', 'pixdim4', str(tr)])
-        util.run(['fslmaths', tmpname, '-Tmean', tmpname + '_mean'])
-        util.run(['fslmaths', tmpname, '-bptf', str(sigma), '-1', '-add',
-                  tmpname + '_mean', tmpname])
-        img = nb.load(tmpname + ".nii.gz")
-        func = img.get_data().reshape((100 * dim, img.shape[-1]), order="F")
+            util.run(['fslmodhd', tmpname + '.nii.gz', 'pixdim4', str(tr)])
+            util.run(['fslmaths', tmpname, '-Tmean', tmpname + '_mean'])
+            util.run(['fslmaths', tmpname, '-bptf', str(sigma), '-1', '-add',
+                      tmpname + '_mean', tmpname])
+            img = nb.load(tmpname + ".nii.gz")
+            func = img.get_data().reshape((100 * dim, img.shape[-1]), order="F")
 
-        os.remove(tmpname + ".nii.gz")
-        os.remove(tmpname + "_mean.nii.gz")
+        # os.remove(tmpname + ".nii.gz")
+        # os.remove(tmpname + "_mean.nii.gz")
 
         func = func[0:n_v, :]
 
