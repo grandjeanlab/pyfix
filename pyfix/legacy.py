@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 import pandas as pd
 import numpy as np
+import os
 import os.path as op
+import logging
+
+log = logging.getLogger(__name__)
 
 LEGACY_FEATURE_LABELS = [
     'nic',
@@ -33,6 +37,8 @@ LEGACY_FEATURE_LABELS = [
     *[f'pixdim:{i}' for i in np.arange(4)],
 ]
 
+LEGACY_FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in LEGACY_FEATURE_LABELS]))
+
 
 def read_features(filename: str):
     """Read legacy FIX features from file.
@@ -45,6 +51,24 @@ def read_features(filename: str):
     
     """
     return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
+
+
+def save_features(path, features):
+    """
+    Save legacy FIX features to file.
+    """
+
+    filename = op.join(path, 'features.csv')
+
+    if op.exists(filename):
+        log.warning(f'Features file already exists: {filename}')
+
+    workdir = op.expanduser(op.dirname(filename))
+    if not op.exists(workdir):
+        os.makedirs(workdir)
+
+    log.info(f'Saving legacy fix features to: {filename}')
+    features[LEGACY_FEATURE_LABELS].to_csv(filename, index=None, header=None)
 
 
 def generate_file_table(*args):

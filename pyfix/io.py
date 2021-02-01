@@ -1,6 +1,28 @@
 #!/usr/bin/env python
 import pandas as pd
 import joblib
+import nibabel as nb
+import os.path as op
+import os
+import logging
+
+log = logging.getLogger(__name__)
+
+
+# def read_ic_maps(filename):
+#
+#     if filename.endswith('.nii') or filename.endswith('.nii.gz'):
+#         d = nb.load(filename)
+#     else:
+#         raise RuntimeError(f'unknown filetype: {filename}')
+#
+#     return d
+#
+#
+# def read_ic_timeseries(filename):
+#
+#     if op
+
 
 def read_file_table(filename):
     """Read a table of files for training.
@@ -14,6 +36,53 @@ def read_file_table(filename):
     return pd.read_csv(filename, index_col=None)
 
 
+def save_file_table(filename, tbl):
+    """
+    Save pyFIX features to a file
+    """
+
+    if not filename.endswith('.file_table'):
+        filename = filename + '.file_table'
+
+    if op.exists(filename):
+        log.warning(f'File table already exists: {filename}')
+
+    workdir = op.expanduser(op.dirname(filename))
+    if workdir == '':
+        workdir = './'
+    if not op.exists(workdir):
+        os.makedirs(workdir)
+
+    log.info(f'Saving file table to: {filename}')
+    tbl.to_csv(filename, index=None)
+
+
+def generate_file_table(*args,
+                        feature_name='pyfix/features.pyfix_features',
+                        label_name='hand_labels_noise.txt'):
+    """
+    Helper function to generate a table of file.
+
+    Args:
+        label_name:
+        feature_name:
+        *args:
+
+    Returns:
+
+    """
+
+    d = pd.DataFrame(
+        {
+            'features': [op.join(f, feature_name) for f in args],
+            'labels': [op.join(f, label_name) for f in args],
+            'subid': [i for i, _ in enumerate(args)]
+        }
+    )
+
+    return d
+
+
 def read_features(filename: str):
     """Read FIX features from file.
 
@@ -25,6 +94,26 @@ def read_features(filename: str):
 
     """
     return pd.read_csv(filename)
+
+
+def save_features(filename, features):
+    """
+    Save pyFIX features to a file
+    """
+
+    if not filename.endswith('.pyfix_features'):
+        filename = filename + '.pyfix_features'
+
+    if op.exists(filename):
+        log.warning(f'Features file already exists: {filename}')
+
+    workdir = op.expanduser(op.dirname(filename))
+    if not op.exists(workdir):
+        os.makedirs(workdir)
+
+    log.info(f'Saving pyFIX features to: {filename}')
+    features.to_csv(filename, index=None)
+
 
 
 def load_model(fname):
@@ -52,7 +141,45 @@ def save_model(fname, mdl):
 
     """
 
-    if not fname.endswith('.pyfix-model'):
-        fname = fname + '.pyfix-model'
+    if not fname.endswith('.pyfix_model'):
+        fname = fname + '.pyfix_model'
 
+    if op.exists(fname):
+        log.warning(f'Model file already exists: {fname}')
+
+    workdir = op.expanduser(op.dirname(fname))
+    if not op.exists(workdir):
+        os.makedirs(workdir)
+
+    log.info(f'Saving trained model to: {fname}')
     joblib.dump(mdl, fname)
+
+
+# @pd.api.extensions.register_dataframe_accessor("filetable")
+# class FileTableAccessor:
+#     def __init__(self, pandas_obj):
+#         self._validate(pandas_obj)
+#         self._obj = pandas_obj
+#
+#     @staticmethod
+#     def _validate(obj):
+#         # verify there is a column latitude and a column longitude
+#         for attribute in ['features', 'labels', 'subid']:
+#             if attribute not in obj.columns:
+#                 raise AttributeError(f"FileTable must have {attribute}.")
+#
+#
+# @pd.api.extensions.register_dataframe_accessor("feature")
+# class FeatureAccessor:
+#     def __init__(self, pandas_obj):
+#         self._validate(pandas_obj)
+#         self._obj = pandas_obj
+#
+#     @staticmethod
+#     def _validate(obj):
+#         # verify there is a column latitude and a column longitude
+#         for attribute in ['group', 'label']:
+#             if attribute not in obj.columns:
+#                 raise AttributeError(f"FeatureTable must have {attribute}.")
+
+
