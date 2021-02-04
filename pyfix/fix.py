@@ -11,12 +11,14 @@ Usage:
 
 import argparse
 import sys
-from pyfix import extract, feature, legacy, io, classify
+from pyfix import extract, feature, legacy, io, classify, clean
 import os
 import os.path as op
 import logging
 from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis, melodicimage
+import nibabel as nb
+import numpy as np
 
 USAGE = '''
 FIX (FMRIB's ICA-based Xnoiseifier)
@@ -62,6 +64,8 @@ def assert_is_melodic_dir(meldir):
 
     # if melodicanalysis.isMelodicDir(meldir):
     #     return
+
+    return
 
     if featanalysis.isFEATDir(meldir) & featanalysis.hasMelodicDir(meldir):
         return
@@ -138,18 +142,85 @@ def run_apply(labels, motion, highpass, aggressive):
     meldir = op.dirname(labels)
     assert_is_melodic_dir(meldir)
 
-    func = op.join(meldir, 'filtered_func_data.nii.gz')
+    nifti_filt = op.join(meldir, 'filtered_func_data.nii.gz')
+    nifti_clean = op.join(meldir, 'filtered_func_data_clean.nii.gz')
+    nifti_clean_varnorm = op.join(meldir, 'filtered_func_data_clean_vn.nii.gz')
+
+    cifti = op.join(meldir, 'Atlas.dtseries.nii')
+    cifti_filt = op.join(meldir, 'Atlas_hp_preclean.dtseries.nii')
+    cifti_clean = op.join(meldir, 'Atlas_clean.dtseries.nii')
+    cifti_clean_varnorm = op.join(meldir, 'Atlas_clean_vn.dscalar.nii')
+
     icamix = op.join(meldir, 'filtered_func_data.ica', 'melodic_mix')
+
+    motion_parameters = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
+    motion_parameters_expanded = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf.nii.gz')
+    motion_parameters_filt = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp.nii.gz')
+    motion_parameters_clean = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp_clean.nii.gz')
 
     ddremove = legacy.read_labels(labels)
 
+    # highpass settings (get from FSF is present and highpass not provided)
 
-    print(func)
-    print(icamix)
-    print(ddremove)
-    print(highpass)
-    print(motion)
-    print(aggressive)
+    if (highpass is None) and featanalysis.isFEATDir(meldir):
+
+        fsf = featanalysis.loadSettings(meldir)
+        if int(fsf['temphp_yn']) == 1:
+            highpass = float(fsf['paradigm_hp'])
+
+    # legacy FIX expands and filters the motion confounds irrespective of whether they are used
+    # for motion regression or not, and saves them as nifti
+    tr = clean.get_tr(nifti_filt)
+
+    mp = clean.load_motion_parameters(motion_parameters)
+    conf = clean.expand_motion_parameters(mp)
+    clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_expanded)
+
+    if highpass is not None:
+        conf = clean.highpass_filter(conf, highpass, tr, tmpdir=meldir)
+        clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_filt)
+
+    # clean filtered_func_data.nii.gz
+    clean.apply(
+        func_fname=nifti_filt,
+        icamix=icamix,
+        noise_idx=ddremove,
+        func_clean_fname=nifti_clean,
+        do_motion_regression=motion,
+        do_filter_func=False,
+        do_filter_motparams=False,
+        temporal_fwhm=highpass,
+        motion_parameters=motion_parameters_filt,
+        func_tr=tr,
+        aggressive=aggressive,
+        varnorm_fname=nifti_clean_varnorm,
+        motparams_clean_fname=motion_parameters_clean,
+    )
+
+    # clean Atlas.dtseries.nii if it exists
+    if op.exists(cifti):
+
+        dd = nb.load(cifti)
+        d0_tr = clean.get_tr(dd)
+        d0, mask0 = clean._get_fdata(dd)
+        d0 = clean.highpass_filter(d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
+        clean._save_image(dd, d0, mask0, fname=cifti_filt)
+
+        clean.apply(
+            func_fname=cifti_filt,
+            icamix=icamix,
+            noise_idx=ddremove,
+            func_clean_fname=cifti_clean,
+            do_motion_regression=motion,
+            do_filter_func=False,
+            do_filter_motparams=False,
+            temporal_fwhm=highpass,
+            motion_parameters=motion_parameters_filt,
+            func_tr=tr,
+            aggressive=aggressive,
+            varnorm_fname=cifti_clean_varnorm,
+        )
+
 
 
 
