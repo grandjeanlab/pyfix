@@ -40,16 +40,18 @@ LEGACY_FEATURE_LABELS = [
 LEGACY_FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in LEGACY_FEATURE_LABELS]))
 
 
-def read_features(filename: str):
+def read_features(path: str):
     """Read legacy FIX features from file.
 
     Args:
-        filename (str):
+        path (str):
 
     Returns:
         features table (pd.DataFrame):
     
     """
+    filename = op.join(path, 'features.csv')
+
     return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
 
 
