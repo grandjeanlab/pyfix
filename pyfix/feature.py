@@ -11,7 +11,7 @@ import scipy
 from sklearn import linear_model
 from spectrum import aryule
 import logging
-from  pyfix import util, legacy
+from pyfix import util, legacy, clean
 from pyfix.util import SegType
 import functools
 import itertools
@@ -61,14 +61,6 @@ def feature_extractor(func):
     FEATURE_EXTRACTORS[name] = wrapper
 
     return wrapper
-
-
-# def read_legacy_features(fname):
-#     return pd.read_csv(fname, header=None, names=LEGACY_FEATURE_LABELS)
-#
-#
-# def save_legacy_features(d):
-#     d[LEGACY_FEATURE_LABELS].to_csv(index=None)
 
 
 @feature_extractor
@@ -301,65 +293,65 @@ def fftfinerwrtnull(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
     return list(out)
 
 
-@cached(cache={}, key=lambda conf, sigma, tr: hashkey(conf.tostring(), sigma, tr))
-def motionconfounds(conf, sigma, tr):
-
-    log.info('Filter and normalise motion confounds')
-
-    conf = np.array(conf)
-
-    conf0 = np.vstack((np.zeros((1, conf.shape[1])),
-                       np.diff(conf, axis=0)))
-    conf0 = np.hstack((conf, conf0))
-    conf0 = norm(conf0)
-    conf0 = np.hstack((conf0, conf0 * conf0))
-    conf0 = norm(conf0)
-
-    if sigma is not None:
-        conf0 = hpfilt(conf0.T, sigma, tr).T
-    conf = norm(conf0)
-
-    return conf
-
-
-def hpfilt(func, sigma, tr):
-    if sigma == 0:
-        func = scipy.signal.detrend(func)
-    else:
-        n_t = func.shape[1]
-        n_v = func.shape[0]
-
-        dim = np.ceil(n_v / 100.0).astype(int)
-        func_0 = np.zeros((100 * dim, n_t))
-
-        func_0[0:n_v, :] = func
-
-        func_0 = func_0.reshape((10, 10, dim, n_t), order="F")
-
-        with TemporaryDirectory() as tmp:
-            tmpname = op.join(tmp, 'func')
-            img = nb.Nifti1Image(func_0, np.eye(4))
-            nb.save(img, tmpname + ".nii.gz")
-
-            util.run(['fslmodhd', tmpname + '.nii.gz', 'pixdim4', str(tr)])
-            util.run(['fslmaths', tmpname, '-Tmean', tmpname + '_mean'])
-            util.run(['fslmaths', tmpname, '-bptf', str(sigma), '-1', '-add',
-                      tmpname + '_mean', tmpname])
-            img = nb.load(tmpname + ".nii.gz")
-            func = img.get_data().reshape((100 * dim, img.shape[-1]), order="F")
-
-        # os.remove(tmpname + ".nii.gz")
-        # os.remove(tmpname + "_mean.nii.gz")
-
-        func = func[0:n_v, :]
-
-    return func
+# @cached(cache={}, key=lambda conf, sigma, tr: hashkey(conf.tostring(), sigma, tr))
+# def motionconfounds(conf, sigma, tr):
+#
+#     log.info('Filter and normalise motion confounds')
+#
+#     conf = np.array(conf)
+#
+#     conf0 = np.vstack((np.zeros((1, conf.shape[1])),
+#                        np.diff(conf, axis=0)))
+#     conf0 = np.hstack((conf, conf0))
+#     conf0 = norm(conf0)
+#     conf0 = np.hstack((conf0, conf0 * conf0))
+#     conf0 = norm(conf0)
+#
+#     if sigma is not None:
+#         conf0 = hpfilt(conf0.T, sigma, tr).T
+#     conf = norm(conf0)
+#
+#     return conf
 
 
-def norm(d, dim=0):
-    d = d - np.mean(d, axis=dim)
-    d = d / np.maximum(np.std(d, axis=dim), 0.00001)
-    return d
+# def hpfilt(func, sigma, tr):
+#     if sigma == 0:
+#         func = scipy.signal.detrend(func)
+#     else:
+#         n_t = func.shape[1]
+#         n_v = func.shape[0]
+#
+#         dim = np.ceil(n_v / 100.0).astype(int)
+#         func_0 = np.zeros((100 * dim, n_t))
+#
+#         func_0[0:n_v, :] = func
+#
+#         func_0 = func_0.reshape((10, 10, dim, n_t), order="F")
+#
+#         with TemporaryDirectory() as tmp:
+#             tmpname = op.join(tmp, 'func')
+#             img = nb.Nifti1Image(func_0, np.eye(4))
+#             nb.save(img, tmpname + ".nii.gz")
+#
+#             util.run(['fslmodhd', tmpname + '.nii.gz', 'pixdim4', str(tr)])
+#             util.run(['fslmaths', tmpname, '-Tmean', tmpname + '_mean'])
+#             util.run(['fslmaths', tmpname, '-bptf', str(sigma), '-1', '-add',
+#                       tmpname + '_mean', tmpname])
+#             img = nb.load(tmpname + ".nii.gz")
+#             func = img.get_data().reshape((100 * dim, img.shape[-1]), order="F")
+#
+#         # os.remove(tmpname + ".nii.gz")
+#         # os.remove(tmpname + "_mean.nii.gz")
+#
+#         func = func[0:n_v, :]
+#
+#     return func
+
+
+# def norm(d, dim=0):
+#     d = d - np.mean(d, axis=dim)
+#     d = d / np.maximum(np.std(d, axis=dim), 0.00001)
+#     return d
 
 
 @feature_extractor
@@ -367,25 +359,25 @@ def motioncorrelation(data, ic_idx):
     # calculate the time series' correlation w/motion
 
     ts = data.ica.get_timecourse(ic_idx)
-    TR = data.ica.tr
+    # TR = data.ica.tr
 
-    motparam = np.stack([data.timecourses[k].data for k in ['RotX', 'RotY', 'RotZ', 'X', 'Y', 'Z']], axis=1)
+    motparam = data.timecourses['motparams']
 
-    hp = data.hp_fwhm
+    # hp = data.hp_fwhm
 
-    sigma = 0.5*hp/TR
+    # sigma = 0.5*hp/TR
 
-    TSS = motionconfounds(motparam, sigma, TR)
+    # TSS = motionconfounds(motparam, sigma, TR)
 
     out = []
-    C1 = np.corrcoef(ts.T, TSS.T)
+    C1 = np.corrcoef(ts.T, motparam.T)
     C1 = np.abs(C1[0, 1:])
     out += [np.max(C1[:6])]
     out += [np.max(C1[6:])]
     out += [np.max(out)]
 
     eps = np.finfo(float).eps
-    regModel = np.dot(np.linalg.pinv(np.concatenate((np.ones((ts.shape[0], 1)), TSS), axis=1)), ts) / (eps + np.std(ts))
+    regModel = np.dot(np.linalg.pinv(np.concatenate((np.ones((ts.shape[0], 1)), motparam), axis=1)), ts) / (eps + np.std(ts))
     regModel = np.sort(np.abs(regModel[1:]))
 
     n = int(np.floor(regModel.shape[0] / 2))
@@ -764,7 +756,7 @@ def _extract_tissue_timeseries(func, dseg):
 def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
 
     if xfm.endswith('.mat'):
-        log.info(f'Apply transform: affine')
+        log.debug(f'Apply transform: affine')
         applyxfm(
             src=src,
             ref=ref,
@@ -773,7 +765,7 @@ def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
             out=out_name,
         )
     elif xfm.endswith('.nii.gz'):
-        log.info(f'Apply transform: warp')
+        log.debug(f'Apply transform: warp')
         applywarp(
             src=src,
             ref=ref,
@@ -993,10 +985,7 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     # % Similar to above - compare zstat against original EPI *edge* image
     # % and/or the original PCA residual image
 
-    # ic_threshold = data['ic_threshold']
     icmap = data.ica.get_spatialmap(ic_idx)
-    # icmap_abs = data['ic_map_abs']
-    # func_brainmask = data['func_brainmask']
     func_brainmask = _get_brainmask_filename(data)
     workdir = data.fixdir
 
@@ -1008,7 +997,6 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
 
     icmap_abs = np.abs(icmap.get_fdata())
     icmap = np.abs(icmap.get_data()) > ic_threshold
-
 
     for msk in edge_masks:
         msk = msk.get_data()
@@ -1025,17 +1013,17 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
 
 @cached(
     cache={},
-    key=lambda func, standard2func_tx, struct, struct2func_xfm, workdir: hashkey('_create_sag_masks')
+    key=lambda func, standard2func_tx, struct, struct2func_xfm, workdir, veins_exf: hashkey('_create_sag_masks')
 )
-def _create_sag_masks(
-        func: nb.Nifti1Image,
-        standard2func_tx: nb.Nifti1Image,
-        struct: nb.Nifti1Image,
-        struct2func_xfm: str,
-        workdir,
-) -> List[str]:
+def _create_sag_masks(func: nb.Nifti1Image,
+                      standard2func_tx: nb.Nifti1Image,
+                      struct: nb.Nifti1Image,
+                      struct2func_xfm: str,
+                      workdir,
+                      veins_exf: nb.Nifti1Image = None) -> List[str]:
 
-    # FIXDIR = os.getenv('FIXPYDIR', '')
+    log.info('Creating sagittal masks')
+
     FSLDIR = os.getenv('FSLDIR', '')
 
     # create standard_to_func transform if it does not exist
@@ -1078,14 +1066,26 @@ def _create_sag_masks(
     # transform standard space sagittal masks into native functional space
 
     sag_masks = np.empty((4, 3), dtype=object)
+    start = 0
 
-    dlabel = ['', 'dil', 'dil2']
+    if veins_exf is not None:
+        fname = op.join(workdir, f'std1mm2exfunc0.nii.gz')
+        veins_exf.to_filename(fname)
+        sag_masks[0, 0] = nb.load(fname)
 
-    for r in range(sag_masks.shape[0]):
-        for c in range(sag_masks.shape[1]):
+        fslmaths(fname).dilF().run(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
+        sag_masks[0, 1] = nb.load(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
 
-            in_name = op.join(util.get_resource_path(), 'masks', 'sag_mask{}{}'.format(r, dlabel[c]))
-            out_name = op.join(workdir, 'std1mm2exfunc{}{}'.format(r, dlabel[c]))
+        fslmaths(fname).dilF().dilF().run(op.join(workdir, f'std1mm2exfunc0dil2.nii.gz'))
+        sag_masks[0, 2] = nb.load(op.join(workdir, 'std1mm2exfunc0dil2.nii.gz'))
+
+        start += 1
+
+    for r in range(start, sag_masks.shape[0]):
+        for c, dlabel in enumerate(('', 'dil', 'dil2')):
+
+            in_name = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
+            out_name = op.join(workdir, f'std1mm2exfunc{r}{dlabel}')
 
             sag_masks[r, c] = _apply_xfm(
                 src=in_name,
@@ -1095,22 +1095,12 @@ def _create_sag_masks(
                 out_name=out_name+'.nii.gz'
             )
 
-        # TODO: deal with veins_exf
-
     return list(sag_masks)
 
 
 @feature_extractor
 def sagmasks(data, ic_idx, ic_threshold=2.5):
     # % look at intersections of ICA spatial map with major vein mask images
-
-    # ic_threshold = data['ic_threshold']
-    # icmap_abs = data['ic_map_abs']
-    # func = data['func']
-    # standard2func_tx = data['standard2func_xfm']
-    # struct = data['struct']
-    # struct2func_xfm = data['struct2func_xfm']
-    # workdir = data['workdir']
 
     workdir = data.fixdir
     icmap_abs = nb.load(_get_abs_ic_filename(data, ic_idx))  # nifti
@@ -1119,23 +1109,13 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
     struct2func_xfm = data.spatialmaps['struct'].xfm  # fname
     standard2func_tx = data.spatialmaps['standard'].xfm if 'standard' in data.spatialmaps else None # fname
 
-    # icmap = data.ica.get_spatialmap(ic_idx).get_fdata()  # ndarray
-    # icmap_abs = np.abs(icmap)  # ndarray
-    # ts = data.ica.get_timecourse(ic_idx)  # ndarray
-    #
-    # struct_dseg = _get_dseg_filename(data)
-    # struct2func_xfm = data.spatialmaps['dseg'].xfm
-    # fixdir = data.fixdir
-
-    # func_mean = _get_data_tmean_filename(data)
+    veins_exf = data.spatialmaps['veins_exf'].data if 'veins_exf' in data.spatialmaps else None
 
     if not op.exists(workdir):
         os.makedirs(workdir)
 
     if struct is None:
         raise RuntimeError('struct is required for feature extractor: sagmasks')
-
-    # func_mean = _calc_func_mean(func, op.join(workdir, 'func_mean.nii.gz'))
 
     out = []
 
@@ -1149,7 +1129,8 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
         standard2func_tx=standard2func_tx,
         struct=struct,
         struct2func_xfm=struct2func_xfm,
-        workdir=workdir
+        workdir=workdir,
+        veins_exf=veins_exf,
     )
 
     sag_masks = np.asarray(sag_masks)

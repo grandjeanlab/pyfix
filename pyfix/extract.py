@@ -8,7 +8,7 @@ import nibabel as nb
 import pyfix.feature as feature
 import scipy
 from pyfix.util import SegType
-from pyfix import util
+from pyfix import util, clean
 from fsl.data.image import Image
 from fsl.wrappers import bet, fslmaths, flirt
 from typing import Optional, Union, List, Type
@@ -230,7 +230,7 @@ class FixData:
 
 
     @classmethod
-    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None):
+    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None):
 
         # fixdir
 
@@ -253,6 +253,8 @@ class FixData:
         struct = nb.load(op.join(meldir, 'reg/highres.nii.gz'))
         struct2func_xfm = op.join(meldir, 'reg/highres2example_func.mat')
 
+        veins_exf = op.join(meldir, 'reg/veins_exf.nii.gz')
+
         #  structural segmentations
 
         if ~op.exists(struct_fast_seg):
@@ -271,9 +273,20 @@ class FixData:
 
         dseg = nb.load(struct_fast_seg)
 
-        # TODO: add support for wmparc (subcort seg)
+        # Load subcortical mask (if it exists) and add to fast pveseg
         if op.exists(struct_fs_wmparc):
-            pass
+            subcort = util.create_mask(
+                dseg=struct_fs_wmparc,
+                labels=(10, 11, 12, 13, 49, 50, 51, 52, 26, 58),
+                outname=op.join(fixdir, 'subcort.nii.gz')
+            )
+
+            dseg = nb.load(struct_fast_seg)
+            dseg_d = dseg.get_fdata()
+            dseg_d[subcort.get_fdata().astype(bool)] = 2
+            dseg = nb.Nifti1Image(dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
+            dseg.to_filename(struct_fast_seg)
+
 
         # standard-to-func transforms
 
@@ -290,15 +303,22 @@ class FixData:
 
         # highpass settings
 
-        fsf = featanalysis.loadSettings(meldir)
-
-        hp = None
-        if int(fsf['temphp_yn']) == 1:
-            hp = float(fsf['paradigm_hp'])
+        if op.exists(op.join(meldir, 'design.fsf')):
+            fsf = featanalysis.loadSettings(meldir)
+            if int(fsf['temphp_yn']) == 1:
+                highpass_fwhm = float(fsf['paradigm_hp'])
 
         # motion parameters
 
-        mp = np.loadtxt(op.join(meldir, 'mc/prefiltered_func_data_mcf.par'))
+        mp = None
+        for fname in ('prefiltered_func_data_mcf.par', 'prefiltered_func_data_mcf_conf_hp.nii.gz'):
+            if op.exists(op.join(meldir, 'mc', fname)):
+                mp = op.join(meldir, 'mc', fname)
+
+        if mp is not None:
+            mp = clean.motion_confounds(mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=meldir)
+            mp = clean._normalise(mp)
+
 
         # instantiate class
 
@@ -308,26 +328,26 @@ class FixData:
                 maps=NiftiMap(ic_map),
                 timecourses=TimeCourse(ic_timeseries, fs=1/tr),
             ),
-            timecourses={
-                'RotX': TimeCourse(mp[:, 0], fs=1/tr),
-                'RotY': TimeCourse(mp[:, 1], fs=1/tr),
-                'RotZ': TimeCourse(mp[:, 2], fs=1/tr),
-                'X': TimeCourse(mp[:, 3], fs=1/tr),
-                'Y': TimeCourse(mp[:, 4], fs=1/tr),
-                'Z': TimeCourse(mp[:, 5], fs=1/tr),
-            },
             spatialmaps={
                 'dseg': NiftiMap(dseg, xfm=struct2func_xfm),
                 'brainmask': NiftiMap(func_brainmask),
                 'struct': NiftiMap(struct, xfm=struct2func_xfm),
                 # 'standard': NiftiMap(standard, xfm=std2func_xfm)
             },
-            hp_fwhm=hp,
+            hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1/tr),
         )
 
         if op.exists(standard):
             d.spatialmaps['standard'] = NiftiMap(standard, xfm=std2func_xfm)
+
+        # motion parameters
+        if mp is not None:
+            d.timecourses['motparams'] = mp
+
+        # veins
+        if op.exists(veins_exf):
+            d.spatialmaps['veins_exf'] = NiftiMap(nb.load(veins_exf))
 
         return d
 
