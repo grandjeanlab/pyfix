@@ -146,7 +146,7 @@ def get_tr(d, tr=None):
     return tr
 
 
-def _get_fdata(d):
+def get_fdata(d):
     '''
     Load d and return data as matrix [time x space].
     Constant columns space over time (columns) will be removed.
@@ -188,7 +188,7 @@ def _get_fdata(d):
     return d0, mask
 
 
-def _save_image(d, d0, mask, fname):
+def save_image(d, d0, mask, fname):
     """
     Save image matrix (d0) [time x space] to disk.
     Image format specfied by image object d.
@@ -360,7 +360,7 @@ def apply(func_fname,
     func = nb.load(func_fname)
 
     # load func data as [time x space] (irrespective of file format)
-    func_d, func_mask = _get_fdata(func)
+    func_d, func_mask = get_fdata(func)
     func_tr = get_tr(func, func_tr)
 
     # filter the func_d (if req'func_d)
@@ -426,7 +426,7 @@ def apply(func_fname,
     # write to file
 
     log.info(f'Save cleaned functional data to file: {func_clean_fname}')
-    _save_image(func, func_d, mask=func_mask, fname=func_clean_fname)
+    save_image(func, func_d, mask=func_mask, fname=func_clean_fname)
 
     # compute variance normalization field and save to file
 
@@ -439,7 +439,7 @@ def apply(func_fname,
                     ica[:, signal_idx] @ beta_ica)  # remove signal components to compute unstructured noise timeseries
         func_d = np.std(func_d, ddof=1, axis=0, keepdims=True)
 
-        _save_image(func, func_d, mask=func_mask, fname=varnorm_fname)
+        save_image(func, func_d, mask=func_mask, fname=varnorm_fname)
 
     # compute movement regressors with noise components removed
 

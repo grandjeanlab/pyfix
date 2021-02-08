@@ -57,17 +57,16 @@ Usage for each stage separately, including creation of training data:
     -A : apply aggressive (full variance) cleanup, instead of the default less-aggressive (unique variance) cleanup.
 '''
 
-FIXDIR = 'pyfix'
+FIXDIR = 'fix'
 
 
 def assert_is_melodic_dir(meldir):
 
-    # if melodicanalysis.isMelodicDir(meldir):
-    #     return
+    if melodicanalysis.isMelodicDir(meldir):
+        return
 
-    return
 
-    if featanalysis.isFEATDir(meldir) & featanalysis.hasMelodicDir(meldir):
+    if featanalysis.hasMelodicDir(meldir):
         return
 
     raise RuntimeError(f'Not a conforming melodic directory: {meldir}')
@@ -96,7 +95,8 @@ def run_feature_extraction(meldir):
 
 def run_train(basename, meldir, loo):
 
-    # TODO: check meldir is a list of conforming melodic directories
+    for d in meldir:
+        assert_is_melodic_dir(d)
 
     file_table = legacy.generate_file_table(*meldir)
 
@@ -136,6 +136,8 @@ def run_classify(meldir, model, threshold=None):
     label_fname = f'{meldir}/fix4melview_{op.splitext(op.basename(model))[0]}.txt'
     fixlabels.saveLabelFile(labels, label_fname, meldir)
 
+    return label_fname
+
 
 def run_apply(labels, motion, highpass, aggressive):
 
@@ -160,6 +162,8 @@ def run_apply(labels, motion, highpass, aggressive):
 
     ddremove = legacy.read_labels(labels)
 
+    tr = clean.get_tr(nifti_filt)
+
     # highpass settings (get from FSF is present and highpass not provided)
 
     if (highpass is None) and featanalysis.isFEATDir(meldir):
@@ -170,15 +174,16 @@ def run_apply(labels, motion, highpass, aggressive):
 
     # legacy FIX expands and filters the motion confounds irrespective of whether they are used
     # for motion regression or not, and saves them as nifti
-    tr = clean.get_tr(nifti_filt)
 
-    mp = clean.load_motion_parameters(motion_parameters)
-    conf = clean.expand_motion_parameters(mp)
-    clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_expanded)
+    if not op.exists(motion_parameters_filt):
 
-    if highpass is not None:
-        conf = clean.highpass_filter(conf, highpass, tr, tmpdir=meldir)
-        clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_filt)
+        mp = clean.load_motion_parameters(motion_parameters)
+        conf = clean.expand_motion_parameters(mp)
+        clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_expanded)
+
+        if highpass is not None:
+            conf = clean.highpass_filter(conf, highpass, tr, tmpdir=meldir)
+            clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_filt)
 
     # clean filtered_func_data.nii.gz
     clean.apply(
@@ -202,9 +207,9 @@ def run_apply(labels, motion, highpass, aggressive):
 
         dd = nb.load(cifti)
         d0_tr = clean.get_tr(dd)
-        d0, mask0 = clean._get_fdata(dd)
+        d0, mask0 = clean.get_fdata(dd)
         d0 = clean.highpass_filter(d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
-        clean._save_image(dd, d0, mask0, fname=cifti_filt)
+        clean.save_image(dd, d0, mask0, fname=cifti_filt)
 
         clean.apply(
             func_fname=cifti_filt,
@@ -222,21 +227,28 @@ def run_apply(labels, motion, highpass, aggressive):
         )
 
 
+def run_main(meldir, model, motion, highpass, aggressive):
+
+    run_feature_extraction(meldir)
+    label_fname = run_classify(meldir, model)
+    run_apply(label_fname, motion, highpass, aggressive)
 
 
 if __name__ == '__main__':
 
     logging.basicConfig(
         # filename='myapp.log',
-        level=logging.DEBUG,
+        level=logging.INFO,
     )
 
     # MAIN parser
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument('meldir', metavar='<mel.ica>')
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
-    main_parser.add_argument('threshold', metavar='<thresh>', type=int)
-    # TODO: add -a args
+    # main_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    main_parser.add_argument('-m', '--motion', action='store_true')
+    main_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
+    main_parser.add_argument('-A', '--aggressive', action='store_true')
 
     # FEATURE parser
     feature_parser = argparse.ArgumentParser(add_help=False)
@@ -286,6 +298,7 @@ if __name__ == '__main__':
         run_apply(**vars(args))
     else:
         args = main_parser.parse_args(sys.argv[1:])
+        run_main(**vars(args))
 
 
     # print(vars(args))
