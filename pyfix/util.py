@@ -2,10 +2,12 @@
 import sys
 from enum import Enum, unique
 from subprocess import check_output
-from typing import List
+from typing import List, Tuple
 import logging
 import time
 import os.path as op
+import nibabel as nb
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -54,3 +56,25 @@ def get_resource(name) -> str:
     r = op.join(get_resource_path(), name)
     assert_file_exists(r)
     return r
+
+
+def create_mask(dseg: str,
+                labels: Tuple[int],
+                outname: str = None):
+    """
+
+    """
+    dseg = nb.load(str(dseg))
+    d = dseg.get_data()
+
+    d0 = np.zeros(d.shape)
+
+    for i in labels:
+        d0[d == i] = 1
+
+    nii = nb.Nifti1Image(d0, dseg.affine, dseg.header)
+
+    if outname is not None:
+        nii.to_filename(str(outname))
+
+    return nii
