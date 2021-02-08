@@ -1,28 +1,24 @@
 #!/usr/bin/env python
-import io
-import os
 import os.path as op
-import uuid
 
+import io
+import itertools
+import logging
 import nibabel as nb
 import numpy as np
+import os
 import pandas as pd
 import scipy
-from sklearn import linear_model
-from spectrum import aryule
-import logging
-from pyfix import util, legacy, clean
-from pyfix.util import SegType
-import functools
-import itertools
-from tempfile import TemporaryDirectory
-from functools import lru_cache
-from fsl.wrappers import bet, fslmaths, flirt, applywarp, applyxfm, concatxfm, invxfm, convertwarp
-from fsl.utils.filetree import FileTree
-from typing import List
 from cachetools import cached
 from cachetools.keys import hashkey
+from fsl.utils.filetree import FileTree
+from fsl.wrappers import fslmaths, flirt, applywarp, applyxfm, concatxfm, invxfm, convertwarp
+from functools import lru_cache
+from sklearn import linear_model
+from spectrum import aryule
+from typing import List
 
+from pyfix import util, legacy
 
 DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
@@ -37,8 +33,8 @@ LEGACY_FEATURE_LABELS = legacy.LEGACY_FEATURE_LABELS
 
 FEATURE_EXTRACTORS = {}
 
-def feature_extractor(func):
 
+def feature_extractor(func):
     name = func.__name__
 
     def wrapper(*args, **kwargs):
@@ -89,11 +85,9 @@ def arvswgn(data, ic_idx, norder=6):
 
 @feature_extractor
 def arfull(data, ic_idx, norder=(1, 2)):
-
     ts = data.ica.get_timecourse(ic_idx)
 
     def _arfull(ts, norder=1):
-
         AR, V, k = aryule(ts, norder)
         return list(np.concatenate(([V], AR)))
 
@@ -103,7 +97,6 @@ def arfull(data, ic_idx, norder=(1, 2)):
 
 @feature_extractor
 def entropy(data, ic_idx):
-
     ts = data.ica.get_timecourse(ic_idx)
 
     bins = np.linspace(-2, 2, int(np.floor(np.sqrt(ts.shape[0]))))
@@ -119,7 +112,6 @@ def entropy(data, ic_idx):
 
 @feature_extractor
 def tsjump(data, ic_idx):
-
     ts = data.ica.get_timecourse(ic_idx)
 
     # Some jump characteristics of the time series
@@ -177,7 +169,6 @@ def nextpow2(x):
 
 @feature_extractor
 def fftcoarse(data, ic_idx, freq_threshold=[0.1, 0.15, 0.2, 0.25]):
-
     def _fftcoarse(ts, TR, freq_threshold):
         # In this function, given the time series and its sampling rate (e.g,
         # TR), we calculate the ratio of its high-frequency energy to low-frequency
@@ -293,67 +284,6 @@ def fftfinerwrtnull(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
     return list(out)
 
 
-# @cached(cache={}, key=lambda conf, sigma, tr: hashkey(conf.tostring(), sigma, tr))
-# def motionconfounds(conf, sigma, tr):
-#
-#     log.info('Filter and normalise motion confounds')
-#
-#     conf = np.array(conf)
-#
-#     conf0 = np.vstack((np.zeros((1, conf.shape[1])),
-#                        np.diff(conf, axis=0)))
-#     conf0 = np.hstack((conf, conf0))
-#     conf0 = norm(conf0)
-#     conf0 = np.hstack((conf0, conf0 * conf0))
-#     conf0 = norm(conf0)
-#
-#     if sigma is not None:
-#         conf0 = hpfilt(conf0.T, sigma, tr).T
-#     conf = norm(conf0)
-#
-#     return conf
-
-
-# def hpfilt(func, sigma, tr):
-#     if sigma == 0:
-#         func = scipy.signal.detrend(func)
-#     else:
-#         n_t = func.shape[1]
-#         n_v = func.shape[0]
-#
-#         dim = np.ceil(n_v / 100.0).astype(int)
-#         func_0 = np.zeros((100 * dim, n_t))
-#
-#         func_0[0:n_v, :] = func
-#
-#         func_0 = func_0.reshape((10, 10, dim, n_t), order="F")
-#
-#         with TemporaryDirectory() as tmp:
-#             tmpname = op.join(tmp, 'func')
-#             img = nb.Nifti1Image(func_0, np.eye(4))
-#             nb.save(img, tmpname + ".nii.gz")
-#
-#             util.run(['fslmodhd', tmpname + '.nii.gz', 'pixdim4', str(tr)])
-#             util.run(['fslmaths', tmpname, '-Tmean', tmpname + '_mean'])
-#             util.run(['fslmaths', tmpname, '-bptf', str(sigma), '-1', '-add',
-#                       tmpname + '_mean', tmpname])
-#             img = nb.load(tmpname + ".nii.gz")
-#             func = img.get_data().reshape((100 * dim, img.shape[-1]), order="F")
-#
-#         # os.remove(tmpname + ".nii.gz")
-#         # os.remove(tmpname + "_mean.nii.gz")
-#
-#         func = func[0:n_v, :]
-#
-#     return func
-
-
-# def norm(d, dim=0):
-#     d = d - np.mean(d, axis=dim)
-#     d = d / np.maximum(np.std(d, axis=dim), 0.00001)
-#     return d
-
-
 @feature_extractor
 def motioncorrelation(data, ic_idx):
     # calculate the time series' correlation w/motion
@@ -377,7 +307,8 @@ def motioncorrelation(data, ic_idx):
     out += [np.max(out)]
 
     eps = np.finfo(float).eps
-    regModel = np.dot(np.linalg.pinv(np.concatenate((np.ones((ts.shape[0], 1)), motparam), axis=1)), ts) / (eps + np.std(ts))
+    regModel = np.dot(np.linalg.pinv(np.concatenate((np.ones((ts.shape[0], 1)), motparam), axis=1)), ts) / (
+                eps + np.std(ts))
     regModel = np.sort(np.abs(regModel[1:]))
 
     n = int(np.floor(regModel.shape[0] / 2))
@@ -419,8 +350,8 @@ def functionoupmle(S, deltat):
     alpha = np.exp(-lmbda * deltat)
     alpha2 = np.exp(-2 * lmbda * deltat)
     sigmahat2 = (1 / n) * (
-                Syy - 2 * alpha * Sxy + alpha2 * Sxx - 2 * mu * (1 - alpha) * (Sy - alpha * Sx) + n * mu ** 2 * (
-                    1 - alpha) ** 2)
+            Syy - 2 * alpha * Sxy + alpha2 * Sxx - 2 * mu * (1 - alpha) * (Sy - alpha * Sx) + n * mu ** 2 * (
+            1 - alpha) ** 2)
 
     sigma = np.sqrt(sigmahat2 * 2 * lmbda / (1 - alpha2))
 
@@ -463,40 +394,21 @@ def _oupjk(S, deltat):
     [muT, sigmaT, lambdaT] = functionoupmle(S, deltat)
 
     # % Calculate the individual partitions.
-    mupart = [None] * m #np.zeros(m)
-    sigmapart = [None] * m #np.zeros(m)
-    lambdapart = [None] * m #np.zeros(m)
+    mupart = [None] * m  # np.zeros(m)
+    sigmapart = [None] * m  # np.zeros(m)
+    lambdapart = [None] * m  # np.zeros(m)
     for i in np.arange(m):
         mupart[i], sigmapart[i], lambdapart[i] = functionoupmle(np.ravel(Spart[i, :]), deltat)
 
-    # for i=1:1:m
-    #     [mupart(i), sigmapart(i), lambdapart(i)] = functionoupmle(Spart(i,:), deltat);
-    # end
     # % Now the jacknife calculation.
     lmbda = (m / (m - 1)) * lambdaT - (np.nansum(lambdapart)) / (m ** 2 - m)
     # % mu and sigma are not biased, so there's no real need for the jackknife.
     # % But we do it anyway for demonstration purposes.
-    # mu = (m/(m-1))*muT - (np.sum(mupart))/(m**2-m)
+
     sigma = (m / (m - 1)) * sigmaT - (np.nansum(sigmapart)) / (m ** 2 - m)
-    # features =  [sigma lambda];
 
     return [sigma, lmbda]
 
-
-# @cached(cache={}, key=lambda map0, pixdim, fname: hashkey(map0.tostring(), pixdim, fname))
-# def save_map(map0, pixdim, fname):
-#
-#     img = nb.Nifti1Image(np.array(map0), affine=np.eye(4))
-#
-#     print(f'save: {fname}')
-#
-#     pxd = img.header['pixdim']
-#     pxd[1:1+len(pixdim)] = pixdim
-#
-#     img.header['pixdim'] = pxd
-#     img.to_filename(fname)
-#
-#     return fname
 
 @feature_extractor
 def clusterdist(data, ic_idx, ic_threshold=2.5):
@@ -526,7 +438,6 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
 
 @cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', ic_idx))
 def _get_abs_ic_filename(data, ic_idx):
-
     fname = op.join(data.fixdir, f'icmap{ic_idx}_abs.nii.gz')
 
     # print(f'save _get_abs_image_filename: {fname}')
@@ -542,7 +453,6 @@ def _get_abs_ic_filename(data, ic_idx):
 
 @cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', id(data), ic_idx))
 def _get_ic_filename(data, ic_idx):
-
     filename = op.join(data.fixdir, f'icmap{ic_idx}.nii.gz')
 
     # print(f'save _get_image_filename: {filename}')
@@ -553,7 +463,6 @@ def _get_ic_filename(data, ic_idx):
 
 @cached(cache={}, key=lambda d: hashkey('_get_data_tmean_filename', id(d)))
 def _get_data_tmean_filename(d):
-
     filename = op.join(d.fixdir, f'input_data_tmean.nii.gz')
 
     # print(f'save _get_mean_data_filename: {filename}')
@@ -571,7 +480,6 @@ def _get_data_tmean_filename(d):
 
 @feature_extractor
 def negativevspositive(data, ic_idx, ic_threshold=2.5):
-
     icmap = _get_ic_filename(data, ic_idx)
     icmap_abs = _get_abs_ic_filename(data, ic_idx)
 
@@ -599,13 +507,6 @@ def negativevspositive(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-# @cached(cache={}, key=lambda d0: hashkey(d0.tostring()))
-# def _calc_tmean(d0):
-#     log.info('Calculate Tmean func')
-#     print('calc tmean')
-#     return np.mean(d0, axis=-1)
-
-
 # TODO: This is SUPER SLOW!!! investigate why. probably the gaussian smoothing.
 @feature_extractor
 def zstattofuncratio(data, ic_idx):
@@ -615,18 +516,8 @@ def zstattofuncratio(data, ic_idx):
     # % and/or the original PCA residual image
     # % global icThreshold;
 
-    # defaults = DEFAULTS.update(workdir=data['fixdir'])
-
     icmap = _get_ic_filename(data, ic_idx)
-
-    # icmap = data.get_ic(ic_idx).map
-    # icmap = save_map(icmap, data.map_pixdim, op.join(data.fixdir, f'icmap{ic_idx}.nii.gz'))
-
-    # func_mean = _calc_tmean(data.data)
-    # func_mean = save_map(func_mean, data.map_pixdim, op.join(data.fixdir, f'func_mean.nii.gz'))
-
     func_mean = _get_data_tmean_filename(data)
-
     workdir = data.fixdir
 
     img_ratio = op.join(workdir, 'dummyd')
@@ -732,29 +623,8 @@ def _extract_tissue_timeseries(func, dseg):
     return ts_csf, ts_gm, ts_wm
 
 
-# @cached(cache={}, key=lambda , idx: hashkey(idx))
-# def _calc_func_mean(func, func_mean_name):
-#     log.info('Calculate Tmean func')
-#     fslmaths(func).Tmean().run(func_mean_name)
-#     return nb.load(func_mean_name)
-
-
-# @lru_cache()
-# def _transform_seg(struct_dseg, ref, xfm, out_name):
-#     log.info('Transform structural segmentation to native functional space')
-#     _apply_xfm(
-#         src=struct_dseg,
-#         ref=ref,
-#         xfm=xfm,
-#         interp='nearestneighbour',
-#         out_name=out_name
-#     )
-#     return nb.load(out_name)
-
-
 @lru_cache()
 def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
-
     if xfm.endswith('.mat'):
         log.debug(f'Apply transform: affine')
         applyxfm(
@@ -781,7 +651,6 @@ def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
 
 @cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', id(data)))
 def _get_dseg_filename(data):
-
     dseg = op.join(data.fixdir, f'dseg.nii.gz')
 
     # print(f'save _get_dseg_filename: {dseg}')
@@ -792,7 +661,6 @@ def _get_dseg_filename(data):
 
 @cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', id(data)))
 def _get_brainmask_filename(data):
-
     d = op.join(data.fixdir, f'brainmask.nii.gz')
 
     # print(f'save _get_brainmask_filename: {d}')
@@ -800,9 +668,9 @@ def _get_brainmask_filename(data):
 
     return d
 
+
 @cached(cache={}, key=lambda data, map_key: hashkey(map_key, id(data)))
 def _get_map_with_tempname(data, map_key):
-
     fname = op.join(data.fixdir, f'{map_key}.nii.gz')
 
     # print(f'_get_map_filename: {map_key} {fname}')
@@ -814,15 +682,15 @@ def _get_map_with_tempname(data, map_key):
 
 @feature_extractor
 def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
-# def masktscorrandoverlap(icmap_abs, ts, seg, ts_gm, ts_wm, ts_csf, ic_threshold):
+    # def masktscorrandoverlap(icmap_abs, ts, seg, ts_gm, ts_wm, ts_csf, ic_threshold):
     # % In this function, given the time series, the mean CSF time-series is
     # % estimated and then its correlation with the given ts is calc'd
     # % Next, the overlap of spatial map w/each and everyone of these masks is
     # % estimated
 
-    icmap = data.ica.get_spatialmap(ic_idx).get_fdata() #ndarray
-    icmap_abs = np.abs(icmap) #ndarray
-    ts = data.ica.get_timecourse(ic_idx) #ndarray
+    icmap = data.ica.get_spatialmap(ic_idx).get_fdata()  # ndarray
+    icmap_abs = np.abs(icmap)  # ndarray
+    ts = data.ica.get_timecourse(ic_idx)  # ndarray
 
     struct_dseg = _get_dseg_filename(data)
     struct2func_xfm = data.spatialmaps['dseg'].xfm
@@ -838,7 +706,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
         out_name=f'{fixdir}/dseg-to-input.nii.gz'
     )
 
-    func = data.input.data #nifti
+    func = data.input.data  # nifti
     ts_csf, ts_gm, ts_wm = _extract_tissue_timeseries(func, seg)
 
     out = []
@@ -897,16 +765,10 @@ def smoothest(data, ic_idx):
 @feature_extractor
 def spatialoverlap(data, ic_idx):
 
-    # func = data['func']
-    # struct_dseg = data['struct_dseg']
-    # struct2func_xfm = data['struct2func_xfm']
-    # fixdir = data['fixdir']
-
     fixdir = data.fixdir
 
     struct_dseg = _get_dseg_filename(data)
     struct2func_xfm = data.spatialmaps['dseg'].xfm
-
 
     # func_mean = _calc_func_mean(func, defaults.get('func_mean', make_dir=True))
     func_mean = _get_data_tmean_filename(data)
@@ -918,8 +780,6 @@ def spatialoverlap(data, ic_idx):
         interp='nearestneighbour',
         out_name=f'{fixdir}/dseg-to-input.nii.gz'
     )
-
-    # icmap_abs = data['ic_map_abs'].get_fdata()
 
     icmap_abs = np.abs(data.ica.get_spatialmap(ic_idx).get_fdata())
 
@@ -938,7 +798,6 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
     # % test for "clusterness" / "compactness" - e.g. feed through TFCE and
     # % take the max (maybe pre-TFCE normalise e.g. by max(abs(z)))
 
-    # ic_threshold = data['ic_threshold']
     icmap = _get_ic_filename(data, ic_idx)
 
     std = util.run(['fslstats', icmap, '-S'])
@@ -968,12 +827,12 @@ def _create_edge_masks(func_brain_mask, workdir):
     # create edge masks in native functional space
     # from the func brain mask
     mask = func_brain_mask
-    ero_mask = [mask] + [op.join(workdir, f'maske{i+1}') for i in range(5)]
-    edge_mask = [op.join(workdir, f'edge{i+1}') for i in range(5)]
+    ero_mask = [mask] + [op.join(workdir, f'maske{i + 1}') for i in range(5)]
+    edge_mask = [op.join(workdir, f'edge{i + 1}') for i in range(5)]
 
     for i in range(5):
-        util.run(['fslmaths', ero_mask[i], '-eroF', ero_mask[i+1]])
-        util.run(['fslmaths', mask, '-sub', ero_mask[i+1], edge_mask[i]])
+        util.run(['fslmaths', ero_mask[i], '-eroF', ero_mask[i + 1]])
+        util.run(['fslmaths', mask, '-sub', ero_mask[i + 1], edge_mask[i]])
 
     return [nb.load(f'{m}.nii.gz') for m in edge_mask]
 
@@ -1021,7 +880,6 @@ def _create_sag_masks(func: nb.Nifti1Image,
                       struct2func_xfm: str,
                       workdir,
                       veins_exf: nb.Nifti1Image = None) -> List[str]:
-
     log.info('Creating sagittal masks')
 
     FSLDIR = os.getenv('FSLDIR', '')
@@ -1062,7 +920,6 @@ def _create_sag_masks(func: nb.Nifti1Image,
         else:
             raise RuntimeError('Unknown transform type!')
 
-
     # transform standard space sagittal masks into native functional space
 
     sag_masks = np.empty((4, 3), dtype=object)
@@ -1083,7 +940,6 @@ def _create_sag_masks(func: nb.Nifti1Image,
 
     for r in range(start, sag_masks.shape[0]):
         for c, dlabel in enumerate(('', 'dil', 'dil2')):
-
             in_name = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
             out_name = op.join(workdir, f'std1mm2exfunc{r}{dlabel}')
 
@@ -1092,7 +948,7 @@ def _create_sag_masks(func: nb.Nifti1Image,
                 ref=func,
                 xfm=standard2func_tx,
                 interp='spline',
-                out_name=out_name+'.nii.gz'
+                out_name=out_name + '.nii.gz'
             )
 
     return list(sag_masks)
@@ -1105,9 +961,9 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
     workdir = data.fixdir
     icmap_abs = nb.load(_get_abs_ic_filename(data, ic_idx))  # nifti
     func_mean = nb.load(_get_data_tmean_filename(data))  # nifti
-    struct = _get_map_with_tempname(data, 'struct')   # nifti
+    struct = _get_map_with_tempname(data, 'struct')  # nifti
     struct2func_xfm = data.spatialmaps['struct'].xfm  # fname
-    standard2func_tx = data.spatialmaps['standard'].xfm if 'standard' in data.spatialmaps else None # fname
+    standard2func_tx = data.spatialmaps['standard'].xfm if 'standard' in data.spatialmaps else None  # fname
 
     veins_exf = data.spatialmaps['veins_exf'].data if 'veins_exf' in data.spatialmaps else None
 
@@ -1155,9 +1011,9 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
 
     return out
 
+
 @feature_extractor
 def stripe(data, ic_idx):
-
     icmap = nb.load(_get_ic_filename(data, ic_idx))
 
     dm1 = op.join(op.dirname(icmap.get_filename()), 'dummy01')
