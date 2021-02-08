@@ -93,6 +93,9 @@ def read_features(filename: str):
         features table (pd.DataFrame):
 
     """
+    if not filename.endswith('.pyfix_features'):
+        filename = filename + '.pyfix_features'
+
     return pd.read_csv(filename)
 
 
