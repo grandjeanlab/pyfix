@@ -76,6 +76,11 @@ def run_feature_extraction(meldir):
 
     assert_is_melodic_dir(meldir)
 
+    logging.basicConfig(
+        filename=op.join(meldir, FIXDIR, 'fix.log'),
+        level=logging.INFO,
+    )
+
     # instantiate FixData object
     d = extract.FixData.from_melodic_dir(
         meldir,
@@ -234,10 +239,23 @@ def run_main(meldir, model, motion, highpass, aggressive):
     run_apply(label_fname, motion, highpass, aggressive)
 
 
+def set_log_file(meldir, mode='a'):
+    log = logging.getLogger()
+
+    for hdlr in log.handlers[:]:  # remove all old handlers
+        log.removeHandler(hdlr)
+
+    fileh = logging.FileHandler(
+        op.join(meldir, FIXDIR, 'fix.log'),
+        mode=mode,
+    )
+    fileh.setFormatter(logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] %(levelname)s : %(message)s'))
+    log.addHandler(fileh)
+
+
 if __name__ == '__main__':
 
     logging.basicConfig(
-        # filename='myapp.log',
         level=logging.INFO,
     )
 
@@ -283,22 +301,24 @@ if __name__ == '__main__':
 
     if switch == '-f':
         args = feature_parser.parse_args(sys.argv[2:])
+        set_log_file(args.meldir, mode='w')
         run_feature_extraction(**vars(args))
     elif switch == '-h':
         print(USAGE)
         sys.exit()
     elif switch == '-t':
         args = train_parser.parse_args(sys.argv[2:])
+        # set_log_file(args.basename, mode='w')
         run_train(**vars(args))
     elif switch == '-c':
         args = classify_parser.parse_args(sys.argv[2:])
+        set_log_file(args.meldir, mode='a')
         run_classify(**vars(args))
     elif switch == '-a':
         args = apply_parser.parse_args(sys.argv[2:])
+        set_log_file(op.dirname(args.labels), mode='a')
         run_apply(**vars(args))
     else:
         args = main_parser.parse_args(sys.argv[1:])
+        set_log_file(args.meldir, mode='w')
         run_main(**vars(args))
-
-
-    # print(vars(args))
