@@ -17,6 +17,7 @@ from functools import lru_cache
 from sklearn import linear_model
 from spectrum import aryule
 from typing import List
+# import shutil
 
 from pyfix import util, legacy
 
@@ -1021,6 +1022,7 @@ def stripe(data, ic_idx):
     util.run(['fslmaths', icmap.get_filename(), '-abs', '-s', '2', '-sub', dm1, '-abs', dm1])
     p95 = float(util.run(['fslstats', dm1, '-P', '95']))
 
-    util.run(['imrm', dm1])
+    # util.run(['imrm', dm1])
+    os.remove(dm1+'.nii.gz')
 
     return [p95]
