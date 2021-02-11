@@ -13,7 +13,7 @@ setuptools.setup(
     description="Python implementation of FSL's FIX tool for denoising",
     url="https://git.fmrib.ox.ac.uk/seanf/pyfix",
     install_requires=install_requires,
-    scripts=['pyfix/fix.py'],
+    scripts=['pyfix/fix'],
     packages=setuptools.find_packages(),
     include_package_data=True,
     python_requires='>=3.6',
