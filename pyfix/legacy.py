@@ -50,7 +50,13 @@ def read_features(path: str):
         features table (pd.DataFrame):
     
     """
-    filename = op.join(path, 'features.csv')
+
+    filename = path
+
+    if not filename.endswith('features.csv'):
+        filename = filename + 'features.csv'
+
+    # filename = op.join(path, 'features.csv')
 
     return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
 
