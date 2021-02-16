@@ -151,6 +151,8 @@ def save_model(fname, mdl):
         log.warning(f'Model file already exists: {fname}')
 
     workdir = op.expanduser(op.dirname(fname))
+    workdir = './' if workdir == '' else workdir
+
     if not op.exists(workdir):
         os.makedirs(workdir)
 
