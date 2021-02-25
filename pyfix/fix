@@ -1,12 +1,6 @@
 #!/usr/bin/env python
-""" FIX (FMRIB's ICA-based Xnoiseifier).
-
-Usage:
-    fix -f <mel.ica>...
-    fix -t <training-output-basename> [-l] <mel.ica>...
-    fix -c <mel.ica> <training.pyfix_model> <thresh>
-
-
+"""
+FIX (FMRIB's ICA-based Xnoiseifier).
 """
 
 import argparse
@@ -25,7 +19,7 @@ FIX (FMRIB's ICA-based Xnoiseifier)
 
 Simple usage, assuming training data already exists:
 
-  fix <mel.ica> <train>.RData <thresh>  [fix -a options]
+  fix <mel.ica> <training.pyfix_model> <thresh>  [fix -a options]
     Extract features, classify and run cleanup - equivalent to:
       fix -f <mel.ica> ; fix -c <mel.ica> <train>.RData <thresh> ; fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
     For the [fix -a options], see "fix -a" usage below.
@@ -43,7 +37,7 @@ Usage for each stage separately, including creation of training data:
     Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
     -l : optional LOO accuracy testing.
     
-  fix -c <mel.ica> <training.pyfix_model>
+  fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
     
   fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
@@ -65,11 +59,28 @@ def assert_is_melodic_dir(meldir):
     if melodicanalysis.isMelodicDir(meldir):
         return
 
-
     if featanalysis.hasMelodicDir(meldir):
         return
 
     raise RuntimeError(f'Not a conforming melodic directory: {meldir}')
+
+
+def _has_features(meldir):
+    return op.exists(op.join(meldir, 'fix', 'features.csv'))
+
+
+def assert_has_features(meldir):
+    if not _has_features(meldir):
+        raise RuntimeError(f'Missing features: {meldir}/fix/features.csv')
+
+
+def _has_hand_labels(meldir):
+    return op.exists(op.join(meldir, 'hand_labels_noise.txt'))
+
+
+def assert_has_hand_labels(meldir):
+    if not _has_hand_labels(meldir):
+        raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
 def run_feature_extraction(meldir):
@@ -100,8 +111,9 @@ def run_feature_extraction(meldir):
 
 def run_train(basename, meldir, loo):
 
-    # for d in meldir:
-    #     assert_is_melodic_dir(d)
+    for d in meldir:
+        assert_has_features(d)
+        assert_has_hand_labels(d)
 
     file_table = legacy.generate_file_table(*meldir)
 
@@ -114,31 +126,40 @@ def run_train(basename, meldir, loo):
     # TODO: save collated features
 
     # classify
-    clf = classify.train(training_data, loo=loo)[0]
+    clf, y = classify.train(training_data, loo=loo)
+
+    if loo:
+        report = legacy.report_loo(y['actual'], y['predicted_pb'], y['idx'])
+        with open(basename+"_LOO_results", 'w') as f:
+            f.write(report)
 
     # save model
     io.save_model(basename, clf)
 
 
-def run_classify(meldir, model, threshold=None):
+def run_classify(meldir, model, threshold):
 
-    assert_is_melodic_dir(meldir)
+    assert_has_features(meldir)
+    assert_has_hand_labels(meldir)
 
-    fixdir = op.join(meldir, 'pyfix')
+    fixdir = op.join(meldir, 'fix')
     if not op.exists(fixdir):
-        fixdir = op.join(meldir, 'fix')
-        if not op.exists(fixdir):
-            raise RuntimeError(f'Cannot find fix directory in: {meldir}')
+        raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
     features0 = legacy.read_features(op.join(fixdir, 'features.csv'))
 
     clf = io.load_model(model)
-    Y = classify.classify(features0, clf)
+    ypb = classify.classify(features0, clf)[1]
+
+    threshold = threshold / 100
+    y = legacy.prob_threshold(ypb, threshold=threshold)
 
     # TODO: move legacy label saving to legacy module
-    labels = [['Noise'] if i else ['Signal'] for i in Y]
+    # invert y so that signal==False and noise==True (as per legacy fix4melview files)
+    y = ~y
+    labels = [['Noise'] if i else ['Signal'] for i in y]
 
-    label_fname = f'{meldir}/fix4melview_{op.splitext(op.basename(model))[0]}.txt'
+    label_fname = f'{meldir}/fix4melview_{op.splitext(op.basename(model))[0]}_thr{int(threshold*100)}.txt'
     fixlabels.saveLabelFile(labels, label_fname, meldir)
 
     return label_fname
@@ -161,7 +182,7 @@ def run_apply(labels, motion, highpass, aggressive):
     icamix = op.join(meldir, 'filtered_func_data.ica', 'melodic_mix')
 
     motion_parameters = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
-    motion_parameters_expanded = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf.nii.gz')
+    # motion_parameters_expanded = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf.nii.gz')
     motion_parameters_filt = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp.nii.gz')
     motion_parameters_clean = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp_clean.nii.gz')
 
@@ -177,18 +198,11 @@ def run_apply(labels, motion, highpass, aggressive):
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
 
-    # legacy FIX expands and filters the motion confounds irrespective of whether they are used
-    # for motion regression or not, and saves them as nifti
-
-    if not op.exists(motion_parameters_filt):
-
-        mp = clean.load_motion_parameters(motion_parameters)
-        conf = clean.expand_motion_parameters(mp)
-        clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_expanded)
-
-        if highpass is not None:
-            conf = clean.highpass_filter(conf, highpass, tr, tmpdir=meldir)
-            clean.create_dummy_nifti(conf.astype(np.float32), tr=tr, fname=motion_parameters_filt)
+    # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
+    # create if they don't
+    if (not op.exists(motion_parameters_filt)) and op.exists(motion_parameters):
+        mp0 = clean.motion_confounds(motion_parameters, tr=tr, temporal_fwhm=highpass, tmpdir=meldir)
+        clean.create_dummy_nifti(mp0.astype(np.float32), tr=tr, fname=motion_parameters_filt)
 
     # clean filtered_func_data.nii.gz
     clean.apply(
@@ -197,9 +211,6 @@ def run_apply(labels, motion, highpass, aggressive):
         noise_idx=ddremove,
         func_clean_fname=nifti_clean,
         do_motion_regression=motion,
-        do_filter_func=False,
-        do_filter_motparams=False,
-        temporal_fwhm=highpass,
         motion_parameters=motion_parameters_filt,
         func_tr=tr,
         aggressive=aggressive,
@@ -222,9 +233,6 @@ def run_apply(labels, motion, highpass, aggressive):
             noise_idx=ddremove,
             func_clean_fname=cifti_clean,
             do_motion_regression=motion,
-            do_filter_func=False,
-            do_filter_motparams=False,
-            temporal_fwhm=highpass,
             motion_parameters=motion_parameters_filt,
             func_tr=tr,
             aggressive=aggressive,
@@ -232,10 +240,10 @@ def run_apply(labels, motion, highpass, aggressive):
         )
 
 
-def run_main(meldir, model, motion, highpass, aggressive):
+def run_main(meldir, model, threshold, motion, highpass, aggressive):
 
     run_feature_extraction(meldir)
-    label_fname = run_classify(meldir, model)
+    label_fname = run_classify(meldir, model, threshold)
     run_apply(label_fname, motion, highpass, aggressive)
 
 
@@ -268,7 +276,7 @@ if __name__ == '__main__':
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument('meldir', metavar='<mel.ica>')
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
-    # main_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    main_parser.add_argument('threshold', metavar='<thresh>', type=int)
     main_parser.add_argument('-m', '--motion', action='store_true')
     main_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
     main_parser.add_argument('-A', '--aggressive', action='store_true')
@@ -287,7 +295,7 @@ if __name__ == '__main__':
     classify_parser = argparse.ArgumentParser(add_help=False)
     classify_parser.add_argument('meldir', metavar='<mel.ica>')
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
-    # classify_parser.add_argument('threshold', metavar='<thresh>', default=None)
+    classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
