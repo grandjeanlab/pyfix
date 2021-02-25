@@ -10,8 +10,7 @@ import scipy
 import logging
 from tempfile import TemporaryDirectory
 
-import pandas as pd
-
+from pyfix.io import load_motion_parameters
 from pyfix.util import run
 
 log = logging.getLogger(__name__)
@@ -268,32 +267,6 @@ def expand_motion_parameters(motion_parameters):
     return conf0
 
 
-def load_motion_parameters(fname):
-    log.info(f'Load motion parameters: {fname}')
-
-    if fname.endswith('.par'):
-
-        log.info('Looks like a mcflirt motion parameter file (*.par)')
-        mp = np.loadtxt(fname)
-        mp = pd.DataFrame(mp, columns=['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z'])
-
-    elif fname.endswith('_motion.tsv'):
-
-        log.info('Looks like BIDS motion parameter file (*_motion.tsv)')
-        mp = pd.read_csv(fname, delimiter='\t', index_col=None)
-
-    elif fname.endswith('.eddy_parameters '):
-
-        log.info('Looks like EDDY motion parameter file (*.eddy_parameters)')
-        mp = np.loadtxt(fname)
-        mp = pd.DataFrame(mp, columns=['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z'])
-
-    else:
-        raise RuntimeError('Unknown motion parameter filetype')
-
-    return mp
-
-
 def motion_confounds(motion_parameters, tr, temporal_fwhm=None, tmpdir=None):
     if motion_parameters.endswith('_mcf_conf_hp.nii.gz'):
 
@@ -336,9 +309,6 @@ def apply(func_fname,
           noise_idx,
           func_clean_fname,
           do_motion_regression=True,
-          do_filter_func=False,
-          do_filter_motparams=True,
-          temporal_fwhm=None,
           motion_parameters=None,
           func_tr=None,
           aggressive=False,
@@ -347,8 +317,8 @@ def apply(func_fname,
           ):
     log.debug(locals())
 
-    if (do_filter_func or do_filter_motparams) and (temporal_fwhm is None):
-        raise RuntimeError('temporal_fwhm required to filter func_d or motparams')
+    # if (do_filter_func or do_filter_motparams) and (temporal_fwhm is None):
+    #     raise RuntimeError('temporal_fwhm required to filter func_d or motparams')
 
     if do_motion_regression and (motion_parameters is None):
         raise RuntimeError('motion parameters are required if do_motion_regression=True')
@@ -363,19 +333,11 @@ def apply(func_fname,
     func_d, func_mask = get_fdata(func)
     func_tr = get_tr(func, func_tr)
 
-    # filter the func_d (if req'func_d)
-    if do_filter_func:
-        log.info('Highpass filter')
-        func_d = highpass_filter(func_d, temporal_fwhm, func_tr, tmpdir=op.dirname(func_fname), retain_mean=True)
-
     # read and normalise ICs (i.e. melodic_mix)
     log.info(f'Load melodic_mix: {icamix}')
     ica = _normalise(np.loadtxt(icamix))
 
     log.debug(f'ICA shape: {ica.shape}')
-
-    # decrement bad component indices so they are zero-indexed
-    # noise_idx -= 1
 
     # convert noise_idx to boolean vector (for convenience)
     tmp = np.full(ica.shape[-1], False)
@@ -388,7 +350,7 @@ def apply(func_fname,
         conf0 = motion_confounds(
             motion_parameters=motion_parameters,
             tr=func_tr,
-            temporal_fwhm=temporal_fwhm if do_filter_motparams else None,
+            temporal_fwhm=None,
             tmpdir=op.dirname(func_fname),
         )
         conf = _normalise(conf0)
@@ -441,16 +403,17 @@ def apply(func_fname,
 
         save_image(func, func_d, mask=func_mask, fname=varnorm_fname)
 
+
     # compute movement regressors with noise components removed
 
-    if (not do_motion_regression) and (motparams_clean_fname is not None):
+    if (not do_motion_regression) and (motparams_clean_fname is not None) and (motion_parameters is not None):
 
         log.info('Compute movement regressors with noise components removed')
 
         conf0 = motion_confounds(
             motion_parameters=motion_parameters,
             tr=func_tr,
-            temporal_fwhm=temporal_fwhm if do_filter_motparams else None,
+            temporal_fwhm=None,
             tmpdir=op.dirname(func_fname),
         )
         conf = _normalise(conf0)
