@@ -7,8 +7,6 @@ import os.path as op
 import os
 import logging
 
-from pyfix.clean import log
-
 log = logging.getLogger(__name__)
 
 
