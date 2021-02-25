@@ -317,14 +317,10 @@ class FixData:
             if op.exists(op.join(meldir, 'mc', fname)):
                 mp = op.join(meldir, 'mc', fname)
 
-        # filter, expand, and normalise motion confounds, as required
-        # save to {meldir}/mc as per legacy FIX
+        # filter, and normalise motion confounds, as required
         if mp is not None:
             mp = clean.motion_confounds(mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=meldir)
-            motion_parameters_filt = op.join(meldir, 'mc', 'prefiltered_func_data_mcf_conf_hp.nii.gz')
-            clean.create_dummy_nifti(mp.astype(np.float32), tr=tr, fname=motion_parameters_filt)
             mp = clean._normalise(mp)
-
 
         # instantiate class
 
