@@ -1,10 +1,13 @@
 #!/usr/bin/env python
+import numpy as np
 import pandas as pd
 import joblib
 import nibabel as nb
 import os.path as op
 import os
 import logging
+
+from pyfix.clean import log
 
 log = logging.getLogger(__name__)
 
@@ -188,3 +191,27 @@ def save_model(fname, mdl):
 #                 raise AttributeError(f"FeatureTable must have {attribute}.")
 
 
+def load_motion_parameters(fname):
+    log.info(f'Load motion parameters: {fname}')
+
+    if fname.endswith('.par'):
+
+        log.info('Looks like a mcflirt motion parameter file (*.par)')
+        mp = np.loadtxt(fname)
+        mp = pd.DataFrame(mp, columns=['rot_x', 'rot_y', 'rot_z', 'trans_x', 'trans_y', 'trans_z'])
+
+    elif fname.endswith('_motion.tsv'):
+
+        log.info('Looks like BIDS motion parameter file (*_motion.tsv)')
+        mp = pd.read_csv(fname, delimiter='\t', index_col=None)
+
+    elif fname.endswith('.eddy_parameters '):
+
+        log.info('Looks like EDDY motion parameter file (*.eddy_parameters)')
+        mp = np.loadtxt(fname)
+        mp = pd.DataFrame(mp, columns=['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z'])
+
+    else:
+        raise RuntimeError('Unknown motion parameter filetype')
+
+    return mp
