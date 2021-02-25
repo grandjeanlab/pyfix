@@ -11,7 +11,7 @@ import pandas as pd
 import scipy
 from cachetools import cached
 from cachetools.keys import hashkey
-from fsl.utils.filetree import FileTree
+# from fsl.utils.filetree import FileTree
 from fsl.wrappers import fslmaths, flirt, applywarp, applyxfm, concatxfm, invxfm, convertwarp
 from functools import lru_cache
 from sklearn import linear_model
@@ -21,7 +21,7 @@ from typing import List
 
 from pyfix import util, legacy
 
-DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
+# DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
 # TODO: add typing
 # TODO: rationalise naming and document
