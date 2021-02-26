@@ -292,7 +292,7 @@ def motioncorrelation(data, ic_idx):
     ts = data.ica.get_timecourse(ic_idx)
     # TR = data.ica.tr
 
-    motparam = data.timecourses['motparams']
+    motparam = data.timecourses['motparams'].data
 
     # hp = data.hp_fwhm
 
