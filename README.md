@@ -36,7 +36,7 @@ However, there is a drop-in command line replacement for `legacy FIX` for fMRI. 
 ```shell
 >> fix
 
-FIX (FMRIB's ICA-based Xnoiseifier)
+FIX (FMRIBs ICA-based Xnoiseifier)
 
 Simple usage, assuming training data already exists:
 
