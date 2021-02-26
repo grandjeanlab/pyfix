@@ -257,7 +257,7 @@ class FixData:
 
         #  structural segmentations
 
-        if ~op.exists(struct_fast_seg):
+        if not op.exists(struct_fast_seg):
             # TODO: move to feature with caching so it is only run JIT
             log.info('Creating structural segmentation with FSL FAST')
 
@@ -345,7 +345,7 @@ class FixData:
 
         # motion parameters
         if mp is not None:
-            d.timecourses['motparams'] = mp
+            d.timecourses['motparams'] = TimeCourse(mp, fs=1/tr)
 
         # veins
         if op.exists(veins_exf):
