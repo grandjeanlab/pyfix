@@ -1,33 +1,25 @@
 #!/usr/bin/env python
-import pandas as pd
-import numpy as np
-# import os.path as op
-from typing import Union
-from pyfix import io
-from pyfix import legacy
 # from fsl.data import fixlabels
 import logging
+# import os.path as op
+from typing import Union
 
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
 from sklearn import pipeline
 from sklearn import preprocessing
-from sklearn import metrics
-
-from joblib import Parallel, delayed
-
-from sklearn import svm as svm, ensemble, neighbors, tree, neural_network as nn
-
+from sklearn import svm as svm
 from sklearn.base import clone
-from sklearn.model_selection import cross_validate as cv, LeaveOneGroupOut, cross_val_predict, LeaveOneOut
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.model_selection import LeaveOneGroupOut
 
-from dataclasses import dataclass
-
+from pyfix import io
+from pyfix import legacy
 
 log = logging.getLogger(__name__)
 
 
 def classify(feature_table, clf):
-
     # TODO: these cols should probably get dropped prior to classify
     drop_cols = [
         'nic',
@@ -88,7 +80,6 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
 def train(table: pd.DataFrame,
           clf=None,
           loo=False):
-
     # TODO: these cols should probably get dropped prior to train
     drop_cols = [
         'nic',
@@ -107,7 +98,8 @@ def train(table: pd.DataFrame,
     # print(y)
 
     if clf is None:
-        clf = ensemble.RandomForestClassifier(n_estimators=50)
+        clf = svm.SVC(probability=True, C=1, gamma='scale', class_weight="balanced")
+        # clf = ensemble.RandomForestClassifier()
 
     y_pred, y_pred_pb, test_idx = None, None, None
 
@@ -118,7 +110,6 @@ def train(table: pd.DataFrame,
 
 
 def _cv_loo(clf, X, y, groups, n_jobs=1):
-
     loo = LeaveOneGroupOut()
 
     pipe = pipeline.make_pipeline(preprocessing.StandardScaler(), clf)
@@ -140,7 +131,6 @@ def _cv_loo(clf, X, y, groups, n_jobs=1):
 
 
 def __fit_and_predict(estimator, X, y, train_idx, test_idx):
-
     X_trn, X_tst, y_trn, y_tst = X[train_idx, :], X[test_idx, :], y[train_idx], y[test_idx]
     estimator.fit(X_trn, y_trn)
 
