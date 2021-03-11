@@ -30,9 +30,9 @@ pip install -e pyfix
 
 PyFIX was designed to be more flexible than `legacy FIX`, and the recommended way to interact with `pyFIX` is via the python API.
 
-1. [fMRI Feature Extraction](pyfix/examples/fmri_feature_extraction.md): Example of creating a `FixData` object for fMRI and extracting `legacy FIX` features.
-2. [fMRI Training and Classification](pyfix/examples/fmri_train.md): Example of training a `pyFIX` model on hand labelled fMRI data, and applying that model to the data from a single subject.
-3. [Custom Feature Extractors](pyfix/examples/custom_feature_extractors.md): Example of how to create your own custom feature extractors.
+1. [fMRI Feature Extraction](pyfix/examples/fmri_feature_extraction.ipynb): Example of creating a `FixData` object for fMRI and extracting `legacy FIX` features.
+2. [fMRI Training and Classification](pyfix/examples/fmri_train.ipynb): Example of training a `pyFIX` model on hand labelled fMRI data, and applying that model to the data from a single subject.
+3. [Custom Feature Extractors](pyfix/examples/custom_feature_extractors.ipynb): Example of how to create your own custom feature extractors.
 
 ### Legacy CLI
 
