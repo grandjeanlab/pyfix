@@ -2,25 +2,21 @@
 import logging
 import os
 import os.path as op
-import numpy as np
-import shutil
-import nibabel as nb
-import pyfix.feature as feature
-import scipy
-from pyfix.util import SegType
-from pyfix import util, clean
-from fsl.data.image import Image
-from fsl.wrappers import bet, fslmaths, flirt
-from typing import Optional, Union, List, Type
-from fsl.utils.filetree import FileTree
-import pandas as pd
-from dataclasses import dataclass, field
-from scipy import io
 from collections import namedtuple
-from fsl.data import featanalysis
-from cachetools import cached, cachedmethod
+from dataclasses import dataclass, field
+from typing import Optional, List, Type
+
+import nibabel as nb
+import numpy as np
+import pandas as pd
+from cachetools import cached
 from cachetools.keys import hashkey
-from functools import lru_cache
+from fsl.data import featanalysis
+from fsl.utils.filetree import FileTree
+from scipy import io
+
+import pyfix.feature as feature
+from pyfix import util, clean
 
 IC = namedtuple('IC', ['map', 'timeseries'])
 
@@ -87,8 +83,8 @@ class NiftiMap(SpatialMap):
 @dataclass(frozen=True)
 class TimeCourse:
     """Container for timecourse data."""
-    data: np.ndarray     # frames (time) x channels
-    fs: float                   # sample rate (Hz)
+    data: np.ndarray  # frames (time) x channels
+    fs: float  # sample rate (Hz)
 
     @property
     def tr(self) -> float:
@@ -196,7 +192,6 @@ class ICA:
         return self.maps.get_map(idx)
 
 
-
 @dataclass(frozen=True)
 class FixData:
     """Container for FIX input data."""
@@ -227,7 +222,6 @@ class FixData:
         if self.input is not None:
             assert self.input.ntime == self.ica.ntime, \
                 f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
-
 
     @classmethod
     def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None):
@@ -287,7 +281,6 @@ class FixData:
             dseg = nb.Nifti1Image(dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
             dseg.to_filename(struct_fast_seg)
 
-
         # standard-to-func transforms
 
         standard = op.join(meldir, 'reg/standard.nii.gz')
@@ -328,7 +321,7 @@ class FixData:
             fixdir=fixdir,
             ica=ICA(
                 maps=NiftiMap(ic_map),
-                timecourses=TimeCourse(ic_timeseries, fs=1/tr),
+                timecourses=TimeCourse(ic_timeseries, fs=1 / tr),
             ),
             spatialmaps={
                 'dseg': NiftiMap(dseg, xfm=struct2func_xfm),
@@ -337,7 +330,7 @@ class FixData:
                 # 'standard': NiftiMap(standard, xfm=std2func_xfm)
             },
             hp_fwhm=highpass_fwhm,
-            input=NiftiTimeCourse(func, fs=1/tr),
+            input=NiftiTimeCourse(func, fs=1 / tr),
         )
 
         if op.exists(standard):
@@ -345,7 +338,7 @@ class FixData:
 
         # motion parameters
         if mp is not None:
-            d.timecourses['motparams'] = TimeCourse(mp, fs=1/tr)
+            d.timecourses['motparams'] = TimeCourse(mp, fs=1 / tr)
 
         # veins
         if op.exists(veins_exf):
@@ -401,7 +394,6 @@ class FixData:
 
 def extract_features(data: FixData,
                      features: List[str]):
-
     log.info("Extract features")
 
     # setup fixdir
@@ -412,7 +404,6 @@ def extract_features(data: FixData,
     # extract features
     rows = []
     for ic_idx in range(data.nic):
-
         log.info(f'Extracting features for IC {ic_idx}')
 
         row0 = [feature.FEATURE_EXTRACTORS[fe](data, ic_idx) for fe in features]
