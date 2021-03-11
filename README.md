@@ -7,6 +7,13 @@ FIX attempts to auto-classify ICA components into "good" vs "bad" components, so
 > This python port attempts to emulate `FIX` as closely as possible but is *not* a like-for-like replacement.  The primary difference is that the ensemble classifier that was used in `FIX`, and was implemented in `R`, is *not* used by `pyFIX`.  Instead we allow the user to use any classifier that conforms to the [scikit-learn](https://scikit-learn.org/stable/) classifier API.  We may, at a later stage, implement an ensemble classifier in `pyFIX` that is inspired by the classifier in `FIX`.
 
 ## Installation
+We recommend that you create your own virtual environment first (e.g.):
+```shell
+conda create -n pyfix_env python=3.8
+conda activate pyfix_env
+```
+
+Then install pyFIX into the environment:
 ```shell
 # install development version from gitlab with pip
 pip install git+https://git.fmrib.ox.ac.uk/seanf/pyfix.git
@@ -15,10 +22,7 @@ pip install git+https://git.fmrib.ox.ac.uk/seanf/pyfix.git
 git clone https://git.fmrib.ox.ac.uk/seanf/pyfix.git
 pip install -e pyfix
 ```
-We recommend that you create your own virtual environment first (e.g.):
-```shell
-conda create -n pyfix_env python=3.8
-```
+
 
 ## Usage
 
