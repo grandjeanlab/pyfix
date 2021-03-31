@@ -126,10 +126,10 @@ def run_train(basename, meldir, loo):
     # TODO: save collated features
 
     # classify
-    clf, y = classify.train(training_data, loo=loo)
+    clf, loo_result = classify.train(training_data, loo=loo)
 
     if loo:
-        report = legacy.report_loo(y['actual'], y['predicted_pb'], y['idx'])
+        report = legacy.report_loo(loo_result.actual, loo_result.predicted_pb, loo_result.idx)
         with open(basename+"_LOO_results", 'w') as f:
             f.write(report)
 
@@ -182,7 +182,6 @@ def run_apply(labels, motion, highpass, aggressive):
     icamix = op.join(meldir, 'filtered_func_data.ica', 'melodic_mix')
 
     motion_parameters = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
-    # motion_parameters_expanded = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf.nii.gz')
     motion_parameters_filt = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp.nii.gz')
     motion_parameters_clean = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp_clean.nii.gz')
 
