@@ -112,6 +112,8 @@ def save_features(filename, features):
         log.warning(f'Features file already exists: {filename}')
 
     workdir = op.expanduser(op.dirname(filename))
+    workdir = './' if workdir == '' else workdir
+
     if not op.exists(workdir):
         os.makedirs(workdir)
 
