@@ -8,6 +8,7 @@ import time
 import os.path as op
 import nibabel as nb
 import numpy as np
+import json
 
 log = logging.getLogger(__name__)
 
@@ -78,3 +79,15 @@ def create_mask(dseg: str,
         nii.to_filename(str(outname))
 
     return nii
+
+def dict2json(dict, jsonfile, indent=4):
+    """Write dictionary to json file."""
+    with open(jsonfile, 'w') as outfile:
+        json.dump(dict, outfile, indent=indent)
+
+
+def json2dict(jsonfile):
+    """Read dictionary from json file."""
+    with open(jsonfile, 'r') as infile:
+        d = json.load(infile)
+    return d
