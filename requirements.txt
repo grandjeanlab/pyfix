@@ -5,5 +5,5 @@ numpy
 fslpy
 pandas
 spectrum
-sklearn
+scikit-learn>=0.24.1
 cachetools
