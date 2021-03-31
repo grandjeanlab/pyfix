@@ -1,27 +1,24 @@
 #!/usr/bin/env python
-import os.path as op
-
 import io
 import itertools
 import logging
+import os
+import os.path as op
+from functools import lru_cache
+from typing import List
+
 import nibabel as nb
 import numpy as np
-import os
 import pandas as pd
 import scipy
 from cachetools import cached
 from cachetools.keys import hashkey
-# from fsl.utils.filetree import FileTree
 from fsl.wrappers import fslmaths, flirt, applywarp, applyxfm, concatxfm, invxfm, convertwarp
-from functools import lru_cache
 from sklearn import linear_model
 from spectrum import aryule
-from typing import List
-# import shutil
 
 from pyfix import util, legacy
 
-# DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
 # TODO: add typing
 # TODO: rationalise naming and document
@@ -35,6 +32,7 @@ LEGACY_FEATURE_LABELS = legacy.LEGACY_FEATURE_LABELS
 FEATURE_EXTRACTORS = {}
 
 
+# TODO: allow feature_extractor decororater to define which content from FixData is required
 def feature_extractor(func):
     name = func.__name__
 
@@ -290,15 +288,7 @@ def motioncorrelation(data, ic_idx):
     # calculate the time series' correlation w/motion
 
     ts = data.ica.get_timecourse(ic_idx)
-    # TR = data.ica.tr
-
     motparam = data.timecourses['motparams'].data
-
-    # hp = data.hp_fwhm
-
-    # sigma = 0.5*hp/TR
-
-    # TSS = motionconfounds(motparam, sigma, TR)
 
     out = []
     C1 = np.corrcoef(ts.T, motparam.T)
@@ -342,10 +332,6 @@ def functionoupmle(S, deltat):
         _log_val = complex(_log_val)
 
     _log_val = np.log(_log_val)
-
-    # if isinstance(_log_val, complex):
-    #     _log_val = _log_val.real
-
     lmbda = -(1 / deltat) * _log_val
 
     alpha = np.exp(-lmbda * deltat)
@@ -465,8 +451,6 @@ def _get_ic_filename(data, ic_idx):
 @cached(cache={}, key=lambda d: hashkey('_get_data_tmean_filename', id(d)))
 def _get_data_tmean_filename(d):
     filename = op.join(d.fixdir, f'input_data_tmean.nii.gz')
-
-    # print(f'save _get_mean_data_filename: {filename}')
 
     d0 = d.input.data
 
