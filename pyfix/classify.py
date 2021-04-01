@@ -1,14 +1,21 @@
 #!/usr/bin/env python
 # from fsl.data import fixlabels
+import base64
+from tempfile import TemporaryFile
+
+import matplotlib as mpl
+mpl.use('Agg')
+
 import logging
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import List
 from typing import Union
 
+import jinja2
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, parallel_backend
 from sklearn import pipeline, metrics
 from sklearn import preprocessing
 from sklearn import svm as svm
@@ -17,6 +24,9 @@ from sklearn.base import clone
 from sklearn.metrics import check_scoring
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.utils import check_random_state
+
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from pyfix import io, legacy
 
@@ -35,7 +45,8 @@ def calculate_metrics(y_true, y_pred, m=None):
     return {f.__name__: f(y_true, y_pred) for f in m}
 
 
-def loo_training_metrics(y, y_pred_pb, test_idx, threshold=None):
+def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None):
+
     if threshold is None:
         threshold = 0.5
 
@@ -45,6 +56,8 @@ def loo_training_metrics(y, y_pred_pb, test_idx, threshold=None):
     records = []
 
     for thr0 in threshold:
+
+        thr0 = np.around(thr0, 3)
 
         y_pred = legacy.prob_threshold(y_pred_pb, threshold=thr0)
 
@@ -59,29 +72,117 @@ def loo_training_metrics(y, y_pred_pb, test_idx, threshold=None):
 
     df = pd.DataFrame(records)
 
-    # def df_to_html(df0):
-    #     html_str = df0.to_html(
-    #         classes="table table-hover table-bordered",
-    #         float_format=lambda x: f'{x:0.4f}'
-    #     )
-    #     return html_str
-    #
-    # env = jinja2.Environment(
-    #     loader=jinja2.PackageLoader('pyfix', 'resources'),
-    #     autoescape=jinja2.select_autoescape(['html', 'xml']),
-    #     extensions=['jinja2.ext.do']
-    # )
-    #
-    # template = env.get_template('training_report_template.html')
-    # html = template.render(
-    #     dataframe=df,
-    #     df_to_html=df_to_html,
-    # )
-    #
-    # with open(outname, 'w') as outfile:
-    #     outfile.write(html)
-
     return df
+
+
+def to_base64(fig):
+    ext = '.png'
+    with TemporaryFile(suffix=ext) as tmp:
+        fig.savefig(tmp, dpi=200, bbox_inches='tight')
+        tmp.seek(0)
+        s = base64.b64encode(tmp.read()).decode("utf-8")
+    return 'data:image/{};base64,'.format(ext) + s
+
+
+def report_loo(loo_result, outname, threshold=None, feat_groups=None):
+
+    df = calculate_loo_metrics(loo_result.actual, loo_result.predicted_pb, loo_result.idx, threshold=threshold)
+
+    df0 = df[['threshold', 'balanced_accuracy_score', 'tpr', 'tnr', '(3*tpr+tnr)/4']]
+    df0 = df0.melt(id_vars=['threshold'], var_name='metric')
+
+    # performance boxplot
+
+    with sns.axes_style("whitegrid"):
+
+        g = sns.FacetGrid(df0, col="metric", height=6, aspect=1)
+        g.map(sns.boxplot, "threshold", "value")
+
+        perf_boxplots = to_base64(g)
+
+    # feature dendrogram
+
+    from scipy.cluster import hierarchy
+
+    fig, ax1 = plt.subplots(figsize=(20, 50))
+
+    X = loo_result.features
+
+    corr = np.corrcoef(X.T)
+
+    corr = corr[:, ~np.isnan(corr).all(axis=0)]
+    corr = corr[~np.isnan(corr).all(axis=1), :]
+
+    corr_linkage = hierarchy.ward(corr)
+    dendro = hierarchy.dendrogram(
+        corr_linkage, labels=loo_result.feature_labels, ax=ax1, orientation='right', leaf_font_size=10,
+    )
+    dendro_idx = np.arange(0, len(dendro['ivl']))
+
+    feat_dendro = to_base64(fig)
+
+    # feature correlation
+
+    fig, ax2 = plt.subplots(figsize=(30, 30))
+
+    plt.imshow(corr[dendro['leaves'], :][:, dendro['leaves']], vmin=-1, vmax=1, cmap='bwr')
+    ax2.set_xticks(dendro_idx)
+    ax2.set_yticks(dendro_idx)
+    ax2.set_xticklabels(dendro['ivl'], rotation='vertical')
+    ax2.set_yticklabels(dendro['ivl']);
+
+    plt.colorbar()
+
+    feat_corr = to_base64(fig)
+
+    # feature importance
+
+    # switching backend is a workaround for a bug whereby parallel jobs are killed by the system
+    with parallel_backend('threading', n_jobs=-2):
+        imp_trn, imp_tst = loo_permutation_importance(loo_result, feature_groups=feat_groups, n_repeats_per_fold=5,
+                                                      n_jobs=-2)
+
+    importance_tst = pd.DataFrame(imp_tst, columns=feat_groups.keys())
+    importance_trn = pd.DataFrame(imp_trn, columns=feat_groups.keys())
+
+    fig, ax = plt.subplots(1, 2, figsize=(20, 20), sharex=True, sharey=True)
+
+    sns.boxplot(data=importance_tst, orient='h', ax=ax[0])
+    ax[0].set_title('Train')
+
+    sns.boxplot(data=importance_trn, orient='h', ax=ax[1])
+    ax[1].set_title('Test')
+
+    feat_importance = to_base64(fig)
+
+    # feat groups
+
+    if feat_groups is not None:
+        feat_groups = {k: np.array(loo_result.feature_labels)[v].tolist() for k, v in feat_groups.items()}
+
+    # create report
+
+    env = jinja2.Environment(
+        loader=jinja2.PackageLoader('pyfix', 'resources'),
+        autoescape=jinja2.select_autoescape(['html', 'xml']),
+        extensions=['jinja2.ext.do']
+    )
+
+    template = env.get_template('training_report_template.html')
+    html = template.render(
+        perf_boxplot=perf_boxplots,
+        feat_dendrogram=feat_dendro,
+        feat_correlation=feat_corr,
+        feat_importance=feat_importance,
+        feat_groups=feat_groups,
+        model=str(loo_result.models[0]),
+        n_folds=loo_result.n_folds,
+        n_samples=loo_result.n_samples,
+        n_features=loo_result.n_features,
+    )
+
+    with open(outname, 'w') as outfile:
+        outfile.write(html)
 
 
 def classify(feature_table, model):
@@ -305,7 +406,10 @@ def loo_permutation_importance(loo_result, scoring='balanced_accuracy', n_repeat
 # adapted from scikit-learn
 def permutation_importance(model, X, y, scoring=None, n_repeats=5, random_state=None, sample_weight=None,
                            feature_groups=None, n_jobs=None):
+
     random_state = check_random_state(random_state)
+    random_seed = random_state.randint(np.iinfo(np.int32).max + 1)
+
     scorer = check_scoring(model, scoring=scoring)
 
     if sample_weight is not None:
@@ -313,15 +417,14 @@ def permutation_importance(model, X, y, scoring=None, n_repeats=5, random_state=
     else:
         baseline_score = scorer(model, X, y)
 
-    n_feat = X.shape[1]
-
     if feature_groups is not None:
         features_idx = feature_groups.values()
     else:
+        n_feat = X.shape[1]
         features_idx = np.arange(n_feat)
 
     scores = Parallel(n_jobs=n_jobs)(delayed(_calculate_permutation_scores)(
-        model, X, y, sample_weight, feat, random_state, n_repeats, scorer
+        model, X, y, sample_weight, feat, random_seed, n_repeats, scorer
     ) for feat in features_idx)
 
     scores = np.stack(scores, axis=1)
@@ -342,6 +445,8 @@ def _calculate_permutation_scores(model, X, y, sample_weight, col_idx,
     This version will accept multiple columns for permutation.
     This allows evaluation of the importance of groups of features.
     """
+
+    random_state = check_random_state(random_state)
 
     col_idx = np.array(col_idx, ndmin=1)
 
