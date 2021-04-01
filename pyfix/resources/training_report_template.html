@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+          integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
+          crossorigin="anonymous">
+
+    <style type="text/css">
+        body {
+            background: whitesmoke !important;
+        }
+
+        .popover {
+            max-width: 100%;
+        }
+
+        @media (min-width: 34em) {
+            .card-columns {
+                -webkit-column-count: 1;
+                -moz-column-count: 1;
+                column-count: 1;
+            }
+        }
+
+        @media (min-width: 48em) {
+            .card-columns {
+                -webkit-column-count: 1;
+                -moz-column-count: 1;
+                column-count: 1;
+            }
+        }
+
+        @media (min-width: 62em) {
+            .card-columns {
+                -webkit-column-count: 1;
+                -moz-column-count: 1;
+                column-count: 1;
+            }
+        }
+
+        @media (min-width: 75em) {
+            .card-columns {
+                -webkit-column-count: 2;
+                -moz-column-count: 2;
+                column-count: 2;
+            }
+        }
+
+        /* Adding !important forces the browser to overwrite the default style applied by Bootstrap */
+    </style>
+
+    <title>QC Subject Report</title>
+</head>
+<body>
+
+<nav class="navbar sticky-top navbar-expand-lg navbar-dark bg-dark">
+    <span class="navbar-brand mb-0 h1">pyFIX training report</span>
+
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+                aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+
+            <ul class="navbar-nav mr-auto">
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#training">LOO Training<span class="sr-only">(current)</span></a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#performance">Test Performance<span class="sr-only">(current)</span></a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="#importance">Feature Importance<span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#correlation">Feature Correlation<span class="sr-only">(current)</span></a>
+                </li>
+
+            </ul>
+        </div>
+
+</nav>
+
+<div class="container-fluid">
+<!--    <div class="card-columns">-->
+
+        <div class="card border-secondary mt-2" id="training">
+            <div class="card-header">
+                LOO Training
+            </div>
+            <div class="card-body">
+
+                <table class="table table-hover table-bordered">
+                    <tr>
+                        <td><b>Model:</b></td><td>{{ model }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Folds:</b></td><td>{{ n_folds }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Samples:</b></td><td>{{ n_samples }}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Features:</b></td><td>{{ n_features }}</td>
+                    </tr>
+                </table>
+
+            </div>
+        </div>
+
+        <div class="card border-secondary mt-2" id="performance">
+            <div class="card-header">
+                Test Performance
+            </div>
+            <div class="card-body">
+                <img src="{{ perf_boxplot }}" width="100%">
+            </div>
+        </div>
+
+        <div class="card border-secondary mt-2" id="importance">
+            <div class="card-header">
+                Feature Importance
+            </div>
+            <div class="card-body">
+                <table>
+                    <tr><td><img src="{{ feat_importance }}" width="100%"></td></tr>
+                </table>
+
+                {% if feat_groups is not none %}
+
+                    <h5>Feature groups:</h5>
+
+                    <table class="table table-hover table-bordered">
+                        <thead>
+                            <tr><th>Group</th><th>Features</th></tr>
+                        </thead>
+                        <tbody>
+                        {% for k, v in feat_groups.items()  %}
+                            <tr>
+                                <td><b>{{ k }}</b></td><td>{{ v }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card border-secondary mt-2" id="correlation">
+            <div class="card-header">
+                Feature Correlation
+            </div>
+            <div class="card-body">
+                <table>
+                    <tr><td><img src="{{ feat_dendrogram }}" width="100%"></td></tr>
+                    <tr><td><img src="{{ feat_correlation }}" width="100%"></td></tr>
+                </table>
+            </div>
+        </div>
+
+<!--    </div>-->
+
+    <div class="row">
+
+        <div class="col-xl-12">
+            <div class="card border-secondary mt-2" id="{{ fmap }}">
+                <div class="card-body">
+                    This report was built using:
+                    <a target='_blank' href="http://jinja.pocoo.org/docs/2.10/">Jinja2</a> |
+                    <a target='_blank' href="http://nilearn.github.io">Nilearn</a> |
+                    <a target='_blank' href="https://getbootstrap.com">Bootstrap</a> |
+                    <a target='_blank' href="https://pandas.pydata.org">Pandas</a> |
+                    <a target='_blank' href="https://www.numpy.org">Numpy</a> |
+                    <a target='_blank' href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/">FSL</a> |
+                    <a target='_blank' href="https://github.com/pog87/PtitPrince">PtitPrince</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Optional JavaScript -->
+<!-- jQuery first, then Popper.js, then Bootstrap JS -->
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+<script>
+    $(document).ready(function () {
+        $('[data-toggle="popover"]').popover({container: 'body'});
+    });
+
+</script>
+
+
+</body>
+
+</html>
