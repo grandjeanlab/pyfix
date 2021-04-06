@@ -112,12 +112,13 @@ def report_loo(loo_result, outname, threshold=None, feat_groups=None):
 
     corr = np.corrcoef(X.T)
 
+    labels=np.array(loo_result.feature_labels)[~np.isnan(corr).all(axis=0)]
     corr = corr[:, ~np.isnan(corr).all(axis=0)]
     corr = corr[~np.isnan(corr).all(axis=1), :]
 
     corr_linkage = hierarchy.ward(corr)
     dendro = hierarchy.dendrogram(
-        corr_linkage, labels=loo_result.feature_labels, ax=ax1, orientation='right', leaf_font_size=10,
+        corr_linkage, labels=labels, ax=ax1, orientation='right', leaf_font_size=10,
     )
     dendro_idx = np.arange(0, len(dendro['ivl']))
 
