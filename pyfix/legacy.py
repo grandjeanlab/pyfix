@@ -124,7 +124,7 @@ def prob_threshold(pb, threshold, col=1):
     return pb[:, col] > threshold
 
 
-def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50)):
+def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50), labels=[0, 1]):
 
     threshold = np.array(threshold) / 100
     records = []
@@ -134,7 +134,7 @@ def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50)):
         y_pred = prob_threshold(y_pred_pb, threshold=thr0)
 
         for fold, idx in enumerate(test_idx):
-            cm = metrics.confusion_matrix(y[idx], y_pred[idx])
+            cm = metrics.confusion_matrix(y[idx], y_pred[idx], labels=labels)
             tpr, tnr, weighted = fix_metric(cm)
             records += [(fold, thr0*100, tpr, tnr, weighted)]
 
@@ -177,12 +177,24 @@ def fix_metric(cm: np.array) -> Tuple[float, float, float]:
 
 def __tnr(cm):
     tn, fp, fn, tp = cm.ravel()
-    return tn / (tn + fp)
+
+    if (tn + fp) == 0:
+        tnr = 0
+    else:
+        tnr = tn / (tn + fp)
+
+    return tnr
 
 
 def __tpr(cm):
     tn, fp, fn, tp = cm.ravel()
-    return tp / (tp + fn)
+
+    if (tp + fn) == 0:
+        tpr = 0
+    else:
+        tpr = tp / (tp + fn)
+
+    return tpr
 
 
 # class FixLegacyClassifier(BaseEstimator, ClassifierMixin):
