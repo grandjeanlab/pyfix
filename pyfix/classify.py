@@ -33,19 +33,18 @@ from pyfix import io, legacy
 log = logging.getLogger(__name__)
 
 
-def calculate_metrics(y_true, y_pred, m=None):
+def calculate_metrics(y_true, y_pred, m=None, labels=[0, 1]):
     if m is None:
-        m = [
-            metrics.confusion_matrix,
-            metrics.balanced_accuracy_score,
-            metrics.matthews_corrcoef,
-            metrics.roc_auc_score,
-        ]
+        m = {
+            'confusion_matrix': lambda y, y_pred: metrics.confusion_matrix(y, y_pred, labels=labels),
+            'balanced_accuracy_score': metrics.balanced_accuracy_score,
+            'matthews_corrcoef': metrics.matthews_corrcoef,
+        }
 
-    return {f.__name__: f(y_true, y_pred) for f in m}
+    return {k: f(y_true, y_pred) for k, f in m.items()}
 
 
-def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None):
+def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None, labels=[0, 1]):
 
     if threshold is None:
         threshold = 0.5
@@ -62,7 +61,7 @@ def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None):
         y_pred = legacy.prob_threshold(y_pred_pb, threshold=thr0)
 
         for fold, idx in enumerate(test_idx):
-            m = calculate_metrics(y[idx], y_pred[idx])
+            m = calculate_metrics(y[idx], y_pred[idx], labels=labels)
             m['fold'] = fold
             m['threshold'] = thr0
 
@@ -179,6 +178,8 @@ def report_loo(loo_result, outname, threshold=None, feat_groups=None):
         n_folds=loo_result.n_folds,
         n_samples=loo_result.n_samples,
         n_features=loo_result.n_features,
+        n_signal=loo_result.actual.sum(),
+        n_noise=loo_result.n_samples - loo_result.actual.sum(),
     )
 
     with open(outname, 'w') as outfile:
