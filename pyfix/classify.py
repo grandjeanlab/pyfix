@@ -33,7 +33,7 @@ from pyfix import io, legacy
 log = logging.getLogger(__name__)
 
 
-def calculate_metrics(y_true, y_pred, m=None, labels=[0, 1]):
+def calculate_metrics(y_true, y_pred, m=None, labels=None):
     if m is None:
         m = {
             'confusion_matrix': lambda y, y_pred: metrics.confusion_matrix(y, y_pred, labels=labels),
@@ -44,13 +44,16 @@ def calculate_metrics(y_true, y_pred, m=None, labels=[0, 1]):
     return {k: f(y_true, y_pred) for k, f in m.items()}
 
 
-def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None, labels=[0, 1]):
+def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None, labels=None):
 
     if threshold is None:
         threshold = 0.5
 
     if np.isscalar(threshold):
         threshold = [threshold]
+
+    if labels is None:
+        labels = np.arange(y_pred_pb.shape[1])
 
     records = []
 
