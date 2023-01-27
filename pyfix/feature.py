@@ -404,7 +404,7 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
     xSiz = data.ica.maps.pixdim[:-1]
     fname = _get_abs_ic_filename(data, ic_idx)
 
-    cmd = ['cluster', '-i', fname, '-t', str(ic_threshold)]
+    cmd = ['fsl-cluster', '-i', fname, '-t', str(ic_threshold)]
 
     clst = np.loadtxt(io.StringIO(util.run(cmd)), skiprows=1, delimiter='\t')
 
