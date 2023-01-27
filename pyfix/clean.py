@@ -3,7 +3,6 @@
 
 import os.path as op
 import nibabel as nb
-import nibabel.gifti.giftiio as gio
 import numpy as np
 from numpy.linalg import pinv
 import scipy
@@ -119,7 +118,7 @@ def _writegii(fname, func, funcSrf):
                                    'NIFTI_INTENT_TIME_SERIES')
         gii.add_gifti_data_array(darray)
 
-    gio.write(gii, fname)
+    nb.save(gii, fname)
 
 
 def get_tr(d, tr=None):
