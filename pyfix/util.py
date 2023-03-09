@@ -66,7 +66,7 @@ def create_mask(dseg: str,
 
     """
     dseg = nb.load(str(dseg))
-    d = dseg.get_data()
+    d = dseg.get_fdata()
 
     d0 = np.zeros(d.shape)
 
