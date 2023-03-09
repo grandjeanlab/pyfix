@@ -507,11 +507,11 @@ def zstattofuncratio(data, ic_idx):
 
     img_ratio = op.join(workdir, 'dummyd')
     util.run(['fslmaths', icmap, '-s', '5', '-abs', '-div', func_mean, img_ratio])
-    img_ratio = nb.load(img_ratio + '.nii.gz').get_data()
+    img_ratio = nb.load(img_ratio + '.nii.gz').get_fdata()
 
     img_mult = op.join(workdir, 'dummym')
     util.run(['fslmaths', icmap, '-s', '5', '-abs', '-mul', func_mean, img_mult])
-    img_mult = nb.load(img_mult + '.nii.gz').get_data()
+    img_mult = nb.load(img_mult + '.nii.gz').get_fdata()
 
     a = np.logical_not(np.isnan(img_mult)) & np.logical_not(np.isinf(img_mult))
     dmp = img_mult[(img_mult > 0) & a]
@@ -711,7 +711,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
     clf.fit(X, ts)
     out += list(np.abs(clf.coef_[1:]))
 
-    seg = seg.get_data()
+    seg = seg.get_fdata()
 
     denom = eps + np.sum(icmap_abs)
     for i in range(1, 4):
@@ -840,10 +840,10 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     eps = np.finfo(float).eps
 
     icmap_abs = np.abs(icmap.get_fdata())
-    icmap = np.abs(icmap.get_data()) > ic_threshold
+    icmap = np.abs(icmap.get_fdata()) > ic_threshold
 
     for msk in edge_masks:
-        msk = msk.get_data()
+        msk = msk.get_fdata()
         whatPercentOnEdgeB = np.sum(icmap * msk) / (eps + np.sum(icmap))
         whatPercentOfEdge = np.sum(icmap * msk) / (eps + np.sum(msk))
 
@@ -960,7 +960,7 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
 
     out = []
 
-    icmap_abs = icmap_abs.get_data()
+    icmap_abs = icmap_abs.get_fdata()
 
     icmap_abs2 = icmap_abs > ic_threshold
     wch = icmap_abs > ic_threshold
@@ -978,7 +978,7 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
 
     for i in range(sag_masks.shape[0]):
         for j in range(sag_masks.shape[1]):
-            smask = sag_masks[i, j].get_data()
+            smask = sag_masks[i, j].get_fdata()
 
             whatPercentOnEdgeB = np.sum(icmap_abs2 * smask) / np.maximum(1, np.sum(icmap_abs2))
             whatPercentOfEdge = np.sum(icmap_abs2 * smask) / np.maximum(1, np.sum(smask))
