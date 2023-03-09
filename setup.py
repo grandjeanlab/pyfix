@@ -1,13 +1,17 @@
+import os.path as op
 import setuptools
 
-from pyfix import __version__
+thisdir = op.dirname(__file__)
 
-with open('requirements.txt', 'rt') as f:
+with open(op.join(thisdir, 'pyfix', 'VERSION'), 'rt') as f:
+    version = f.read().strip()
+
+with open(op.join(thisdir, 'requirements.txt'), 'rt') as f:
     install_requires = [l.strip() for l in f.readlines()]
 
 setuptools.setup(
     name="pyfix",
-    version=__version__,
+    version=version,
     author="Sean Fitzgibbon",
     author_email="sean.fitzgibbon@ndcn.ox.ac.uk",
     description="Python implementation of FSL's FIX tool for denoising",
