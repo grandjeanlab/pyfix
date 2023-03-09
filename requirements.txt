@@ -1,4 +1,4 @@
-nibabel==2.*
+nibabel
 scipy
 matplotlib
 numpy
