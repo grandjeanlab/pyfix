@@ -18,10 +18,8 @@ setuptools.setup(
     url="https://git.fmrib.ox.ac.uk/seanf/pyfix",
     install_requires=install_requires,
     scripts=['pyfix/fix'],
-    # packages=setuptools.find_packages(),
     packages=['pyfix'],
-    package_dir={'pyfix': 'pyfix'},
-    package_data={'pyfix': ['resources/*', 'resources/masks/*']},
+    package_data={'pyfix': ['VERSION', 'resources/*', 'resources/masks/*']},
     include_package_data=True,
     python_requires='>=3.8',
 )
