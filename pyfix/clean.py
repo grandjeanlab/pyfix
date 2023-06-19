@@ -360,13 +360,13 @@ def apply(func_fname,
     if aggressive:
         if do_motion_regression:
             log.info(f'Concat motion parameters with ICA')
-            conf0 = np.concatenate((conf0, ica[:, ddremove]), axis=1)
+            conf = np.concatenate((conf, ica[:, noise_idx]), axis=1)
             log.info(f'Regress noise ICA components and motion parameters from functional data (aggressive)')
         else:
-            conf0 = ica
+            conf = ica
             log.info(f'Regress noise ICA components from functional data (aggressive)')
 
-        func_d = func_d - (conf0 @ (np.linalg.pinv(conf0, 1e-6) @ func_d))  # cleanup
+        func_d = func_d - (conf @ (np.linalg.pinv(conf, 1e-6) @ func_d))  # cleanup
 
     else:
 
