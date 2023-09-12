@@ -13,7 +13,14 @@ import pandas as pd
 import scipy
 from cachetools import cached
 from cachetools.keys import hashkey
-from fsl.wrappers import fslmaths, flirt, applywarp, applyxfm, concatxfm, invxfm, convertwarp
+from fsl.wrappers import (fslmaths,
+                          flirt,
+                          applywarp,
+                          applyxfm,
+                          concatxfm,
+                          invxfm,
+                          convertwarp,
+                          cluster)
 from sklearn import linear_model
 from spectrum import aryule
 
@@ -403,10 +410,7 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
 
     xSiz = data.ica.maps.pixdim[:-1]
     fname = _get_abs_ic_filename(data, ic_idx)
-
-    cmd = ['fsl-cluster', '-i', fname, '-t', str(ic_threshold)]
-
-    clst = np.loadtxt(io.StringIO(util.run(cmd)), skiprows=1, delimiter='\t')
+    clst = cluster(fname, ic_threshold)[0]
 
     if clst.shape[0] > 0:
         X = clst[:, 1]
