@@ -31,15 +31,15 @@ Usage for each stage separately, including creation of training data:
 
   fix -f <mel.ica>
     Feature extraction (for later training and/or classifying).
-    
+
   fix -t <training-output-basename> [-l] <mel1.ica> <mel2.ica> ...
     Train classifier (Training output basename followed by list of Melodic directories).
     Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
     -l : optional LOO accuracy testing.
-    
+
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
-    
+
   fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
     Apply cleanup, using artefacts listed in the .txt file, to the data inside the enclosing Feat/Melodic directory.
     -h -1          apply no highpass filtering.
@@ -140,7 +140,6 @@ def run_train(basename, meldir, loo):
 def run_classify(meldir, model, threshold):
 
     assert_has_features(meldir)
-    assert_has_hand_labels(meldir)
 
     fixdir = op.join(meldir, 'fix')
     if not op.exists(fixdir):
@@ -265,7 +264,7 @@ def set_log_file(meldir, mode='a'):
     log.addHandler(fileh)
 
 
-if __name__ == '__main__':
+def main():
 
     logging.basicConfig(
         level=logging.INFO,
@@ -334,3 +333,7 @@ if __name__ == '__main__':
         args = main_parser.parse_args(sys.argv[1:])
         set_log_file(args.meldir, mode='w')
         run_main(**vars(args))
+
+
+if __name__ == '__main__':
+    main()
