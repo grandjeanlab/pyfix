@@ -140,7 +140,6 @@ def run_train(basename, meldir, loo):
 def run_classify(meldir, model, threshold):
 
     assert_has_features(meldir)
-    assert_has_hand_labels(meldir)
 
     fixdir = op.join(meldir, 'fix')
     if not op.exists(fixdir):
