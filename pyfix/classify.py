@@ -18,7 +18,7 @@ import pandas as pd
 from joblib import Parallel, delayed, parallel_backend
 from sklearn import pipeline, metrics
 from sklearn import preprocessing
-from sklearn import svm as svm
+from sklearn import ensemble
 from sklearn.base import clone
 # from sklearn.inspection import _weights_scorer
 from sklearn.metrics import check_scoring
@@ -328,7 +328,7 @@ def train(table: pd.DataFrame,
     feature_labels = list(table.drop(columns=drop_cols, errors='ignore'))
 
     if model is None:
-        model = svm.SVC(probability=True, C=1, gamma='scale', class_weight="balanced")
+        model = ensemble.RandomForestClassifier(n_esimators=50)
 
     output = (model.fit(X, y),)
 
