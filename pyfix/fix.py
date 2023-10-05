@@ -5,7 +5,7 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 
 import argparse
 import sys
-from pyfix import extract, feature, legacy, io, classify, clean
+from pyfix import extract, feature, legacy, io, classify, clean, __version__
 import os
 import os.path as op
 import logging
@@ -14,8 +14,8 @@ from fsl.data import melodicanalysis, featanalysis, melodicimage
 import nibabel as nb
 import numpy as np
 
-USAGE = '''
-FIX (FMRIB's ICA-based Xnoiseifier)
+USAGE = f'''
+FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
 
 Simple usage, assuming training data already exists:
 
