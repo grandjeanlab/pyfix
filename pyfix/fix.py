@@ -4,15 +4,19 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 """
 
 import argparse
-import sys
-from pyfix import extract, feature, legacy, io, classify, clean, __version__
+import importlib
+import logging
 import os
 import os.path as op
-import logging
-from fsl.data import fixlabels
-from fsl.data import melodicanalysis, featanalysis, melodicimage
+import sys
+
 import nibabel as nb
 import numpy as np
+
+from fsl.data import fixlabels
+from fsl.data import melodicanalysis, featanalysis, melodicimage
+
+from pyfix import extract, feature, legacy, io, classify, clean, __version__
 
 USAGE = f'''
 FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
@@ -103,11 +107,11 @@ def create_model():
     params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
 
     if model is None and len(params) == 0:
-        model = 'sklearn.ensemble.RandomForestClassifier'
+        model  = 'sklearn.ensemble.RandomForestClassifier'
         params = {'n_estimators' : 50}
 
     mod, cls = model.rsplit('.', 1)
-    mod      = __import__(mod)
+    mod      = importlib.import_module(mod)
     cls      = getattr(mod, cls)
 
     return cls(**params)
