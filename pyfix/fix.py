@@ -83,6 +83,36 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
+def create_model():
+    """Create the scikit learn classifier that is used for training and
+    classification. By default a RandomForestClassifier is created, but
+    this can be customised with environment variables.
+
+    The classifier class can be specified via the "PYFIX_MODEL" environment
+    variable, e.g.
+
+        PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
+
+    Initialisation parameters can be set via "PYFIX_MODEL_<parameter>"
+    environment variables, e.g:
+
+        PYFIX_MODEL_n_estimators=100
+    """
+    model  = os.environ.get('PYFIX_MODEL', None)
+    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
+    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
+
+    if model is None and len(params) == 0:
+        model = 'sklearn.ensemble.RandomForestClassifier'
+        params = {'n_estimators' : 50}
+
+    mod, cls = model.rsplit('.', 1)
+    mod      = __import__(mod)
+    cls      = getattr(mod, cls)
+
+    return cls(**params)
+
+
 def run_feature_extraction(meldir):
 
     assert_is_melodic_dir(meldir)
@@ -125,8 +155,11 @@ def run_train(basename, meldir, loo):
 
     # TODO: save collated features
 
+    # create classifier
+    model = create_model()
+
     # classify
-    clf, loo_result = classify.train(training_data, loo=loo)
+    clf, loo_result = classify.train(training_data, model=model, loo=loo)
 
     if loo:
         report = legacy.report_loo(loo_result.actual, loo_result.predicted_pb, loo_result.idx)
