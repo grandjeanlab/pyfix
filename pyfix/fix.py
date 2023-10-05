@@ -21,11 +21,11 @@ Simple usage, assuming training data already exists:
 
   fix <mel.ica> <training.pyfix_model> <thresh>  [fix -a options]
     Extract features, classify and run cleanup - equivalent to:
-      fix -f <mel.ica> ; fix -c <mel.ica> <train>.RData <thresh> ; fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
+      fix -f <mel.ica> ; fix -c <mel.ica> <train>.pyfix_model <thresh> ; fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
     For the [fix -a options], see "fix -a" usage below.
     The first argument should be a FEAT/MELODIC output directory that includes a filtered_func_data.ica melodic output.
-    Example:    fix study1/subject1.ica /usr/local/FIX/HCP_noHP.RData 20 -m -h 200
-    Example:    fix subject2.feat /home/FIX/Standard_noHP.RData 20 -m   (ICA must have been turned on in FEAT pre-stats)
+    Example:    fix study1/subject1.ica /usr/local/FIX/HCP_noHP.pyfix_model 20 -m -h 200
+    Example:    fix subject2.feat /home/FIX/Standard_noHP.pyfix_model 20 -m   (ICA must have been turned on in FEAT pre-stats)
 
 Usage for each stage separately, including creation of training data:
 
