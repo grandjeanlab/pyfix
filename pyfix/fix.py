@@ -5,6 +5,7 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 
 import argparse
 import importlib
+import itertools as it
 import logging
 import os
 import os.path as op
@@ -43,6 +44,11 @@ Usage for each stage separately, including creation of training data:
 
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
+
+  fix -C <training.pyfix_model> <mel1.ica> <mel2.ica> ...
+    Classify components for all listed Melodic directories over a range of thresholds and produce LOO-style accuracy
+      testing using existing hand classifictions.
+    Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
 
   fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
     Apply cleanup, using artefacts listed in the .txt file, to the data inside the enclosing Feat/Melodic directory.
@@ -202,6 +208,19 @@ def run_classify(meldir, model, threshold):
     return label_file
 
 
+def run_evaluate(meldir, model):
+
+    thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
+
+    for md in meldir:
+        assert_has_hand_labels(md)
+
+    for md, threshold in it.product(meldir, thresholds):
+        label_file = legacy.generate_label_filename(md, model, threshold)
+        if not op.exists(label_file):
+            run_classify(md, model, threshold)
+
+    legacy.report_evaluate(meldirs, model, thresholds)
 
 
 def run_apply(labels, motion, highpass, aggressive):
@@ -335,6 +354,11 @@ def main():
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
 
+    # EVALUATE parser
+    eval_parser = argparse.ArgumentParser(add_help=False)
+    eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
+    eval_parser.add_argument('basename', metavar='<training-output-basename>')
+
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
     apply_parser.add_argument('labels', metavar='<mel.ica/fix4melview_TRAIN_thr.txt>')
@@ -359,12 +383,14 @@ def main():
         sys.exit()
     elif switch == '-t':
         args = train_parser.parse_args(sys.argv[2:])
-        # set_log_file(args.basename, mode='w')
         run_train(**vars(args))
     elif switch == '-c':
         args = classify_parser.parse_args(sys.argv[2:])
         set_log_file(args.meldir, mode='a')
         run_classify(**vars(args))
+    elif switch == '-C':
+        args = eval_parser.parse_args(sys.argv[2:])
+        run_evaluate(**vars(args))
     elif switch == '-a':
         args = apply_parser.parse_args(sys.argv[2:])
         set_log_file(op.dirname(args.labels), mode='a')

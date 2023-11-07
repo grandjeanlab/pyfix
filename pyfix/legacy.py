@@ -7,6 +7,8 @@ import logging
 from sklearn import metrics
 from typing import Tuple
 
+from fsl.data.image import Image
+
 log = logging.getLogger(__name__)
 
 LEGACY_FEATURE_LABELS = [
@@ -50,7 +52,7 @@ def read_features(path: str):
 
     Returns:
         features table (pd.DataFrame):
-    
+
     """
 
     filename = path
@@ -108,13 +110,24 @@ def generate_label_filename(meldir, modelfile, threshold):
     return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
 
 
-def read_labels(filename: str):
-    """Read legacy label files, melview and hand_labels_noise.txt"""
+def read_labels(filename: str, nics : int = None):
+    """Read legacy label files, melview and hand_labels_noise.txt.
+
+    If nics is None, a sequence of one-indexed noise IC labels is returned.
+    Otherwise, a sequence with a value for each IC is returned, containing
+    1 for noise ICs, and 0 for signal ICs.
+    """
 
     with open(filename, 'r') as f:
         labels = f.readlines()[-1]
 
-    labels = np.fromstring(labels.strip('[]\n'), sep=',', dtype=int)
+    noise_labels = np.fromstring(labels.strip('[]\n'), sep=',', dtype=int)
+
+    if nics is None:
+        labels = noise_labels
+    else:
+        labels = np.zeros(nics)
+        labels[noise_labels - 1] = 1
 
     return labels
 
@@ -128,6 +141,28 @@ def prob_threshold(pb, threshold, col=1):
     Lower (conservative) threshold will result in more outputs being included
     """
     return pb[:, col] > threshold
+
+
+def report_evaluate(meldirs, model, thresholds):
+
+    columns = ['Dataset', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4']
+    results = pd.DataFrame(columns=columns)
+
+    for meldir in meldirs:
+        dataset     = op.basename(meldir)
+        nics        = Image(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC')).shape[3]
+        hand_labels = read_labels(op.join(meldir, 'hand_labels_noise.txt'), nics)
+
+        for threshold in thresholds:
+            model_labels = generate_label_filename(meldir, model, threshold)
+            model_labels = read_labels(model_labels, nics)
+
+            cm = metrics.confusion_matrix(hand_labels, model_labels, [0, 1])
+            tpr, tnr, weighted = fix_metric(cm)
+
+            results[columns] = (dataset, threshold, tpr, tnr, weighted)
+
+    print(results.to_string())
 
 
 def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50), labels=[0, 1]):
