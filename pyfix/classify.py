@@ -232,11 +232,9 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
 
         train_data[idx]['group'] = g0
 
+        labels = legacy.read_labels(l0)
         l1 = np.zeros(train_data[idx].shape[0])
-        for line in open(l0, "r"):
-            ln = line
-        ln = ln.strip().strip("[]")
-        l1[np.fromstring(ln, dtype=int, sep=",") - 1] = 1
+        l1[labels - 1] = 1
 
         train_data[idx]['label'] = l1
 
