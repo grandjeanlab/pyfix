@@ -109,6 +109,8 @@ def create_model():
     if model is None and len(params) == 0:
         model  = 'sklearn.ensemble.RandomForestClassifier'
         params = {'n_estimators' : 50}
+    elif model is None:
+        model  = 'sklearn.ensemble.RandomForestClassifier'
 
     mod, cls = model.rsplit('.', 1)
     mod      = importlib.import_module(mod)
