@@ -187,18 +187,19 @@ def run_classify(meldir, model, threshold):
     clf = io.load_model(model)
     ypb = classify.classify(features0, clf)[1]
 
-    threshold = threshold / 100
-    y = legacy.prob_threshold(ypb, threshold=threshold)
+    y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
     # TODO: move legacy label saving to legacy module
     # invert y so that signal==False and noise==True (as per legacy fix4melview files)
     y = ~y
     labels = [['Noise'] if i else ['Signal'] for i in y]
 
-    label_fname = f'{meldir}/fix4melview_{op.splitext(op.basename(model))[0]}_thr{int(threshold*100)}.txt'
-    fixlabels.saveLabelFile(labels, label_fname, meldir)
+    label_file = legacy.generate_label_filename(meldir, model, threshold)
+    fixlabels.saveLabelFile(labels, label_file, meldir)
 
-    return label_fname
+    return label_file
+
+
 
 
 def run_apply(labels, motion, highpass, aggressive):
