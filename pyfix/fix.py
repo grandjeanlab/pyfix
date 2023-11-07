@@ -242,7 +242,7 @@ def run_evaluate(meldir, model):
         if not op.exists(label_file):
             run_classify(md, model, threshold)
 
-    legacy.report_evaluate(meldirs, model, thresholds)
+    legacy.report_evaluate(meldir, model, thresholds)
 
 
 def run_apply(labels, motion, highpass, aggressive):
@@ -378,8 +378,8 @@ def main():
 
     # EVALUATE parser
     eval_parser = argparse.ArgumentParser(add_help=False)
+    eval_parser.add_argument('model', metavar='<training.pyfix_model>')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
-    eval_parser.add_argument('basename', metavar='<training-output-basename>')
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
