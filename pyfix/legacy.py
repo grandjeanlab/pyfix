@@ -157,7 +157,7 @@ def report_evaluate(meldirs, model, thresholds):
             model_labels = generate_label_filename(meldir, model, threshold)
             model_labels = read_labels(model_labels, nics)
 
-            cm = metrics.confusion_matrix(hand_labels, model_labels, [0, 1])
+            cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])
             tpr, tnr, weighted = fix_metric(cm)
 
             results[columns] = (dataset, threshold, tpr, tnr, weighted)
