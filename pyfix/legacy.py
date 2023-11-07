@@ -146,7 +146,10 @@ def prob_threshold(pb, threshold, col=1):
 def report_evaluate(meldirs, model, thresholds):
 
     columns = ['Dataset', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4']
-    results = pd.DataFrame(columns=columns)
+    results = pd.DataFrame(index=np.arange(len(meldirs) * len(thresholds)),
+                           columns=columns)
+
+    row = 0
 
     for meldir in meldirs:
         dataset     = op.basename(meldir)
@@ -160,7 +163,8 @@ def report_evaluate(meldirs, model, thresholds):
             cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])
             tpr, tnr, weighted = fix_metric(cm)
 
-            results[columns] = (dataset, threshold, tpr, tnr, weighted)
+            results.loc[row, columns] = (dataset, threshold, tpr, tnr, weighted)
+            row += 1
 
     print(results.to_string())
 
