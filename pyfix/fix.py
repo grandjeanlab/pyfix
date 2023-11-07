@@ -26,11 +26,18 @@ Simple usage, assuming training data already exists:
 
   fix <mel.ica> <training.pyfix_model> <thresh>  [fix -a options]
     Extract features, classify and run cleanup - equivalent to:
-      fix -f <mel.ica> ; fix -c <mel.ica> <train>.pyfix_model <thresh> ; fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
+      fix -f <mel.ica> ;
+      fix -c <mel.ica> <train>.pyfix_model <thresh> ;
+      fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
+
     For the [fix -a options], see "fix -a" usage below.
-    The first argument should be a FEAT/MELODIC output directory that includes a filtered_func_data.ica melodic output.
-    Example:    fix study1/subject1.ica /usr/local/FIX/HCP_noHP.pyfix_model 20 -m -h 200
-    Example:    fix subject2.feat /home/FIX/Standard_noHP.pyfix_model 20 -m   (ICA must have been turned on in FEAT pre-stats)
+    The first argument should be a FEAT/MELODIC output directory
+    that includes a filtered_func_data.ica melodic output.
+
+    Example:    fix study1/subject1.ica HCP_noHP.pyfix_model 20 -m -h 200
+    Example:    fix subject2.feat Standard_noHP.pyfix_model 20 -m
+
+    (ICA must have been turned on in FEAT pre-stats)
 
 Usage for each stage separately, including creation of training data:
 
@@ -38,27 +45,42 @@ Usage for each stage separately, including creation of training data:
     Feature extraction (for later training and/or classifying).
 
   fix -t <training-output-basename> [-l] <mel1.ica> <mel2.ica> ...
-    Train classifier (Training output basename followed by list of Melodic directories).
-    Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
+
+    Train classifier (Training output basename followed by list of Melodic
+    directories).  Every Melodic directory must contain hand_labels_noise.txt
+    listing the artefact components, e.g.: [1, 4, 99, ... 140].
+
     -l : optional LOO accuracy testing.
 
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
 
   fix -C <training.pyfix_model> <mel1.ica> <mel2.ica> ...
-    Classify components for all listed Melodic directories over a range of thresholds and produce LOO-style accuracy
-      testing using existing hand classifictions.
-    Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
+
+    Classify components for all listed Melodic directories over a range of
+    thresholds and produce LOO-style accuracy testing using existing hand
+    classifictions.  Every Melodic directory must contain hand_labels_noise.txt
+    listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
   fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
-    Apply cleanup, using artefacts listed in the .txt file, to the data inside the enclosing Feat/Melodic directory.
+
+    Apply cleanup, using artefacts listed in the .txt file, to the data inside
+    the enclosing Feat/Melodic directory.
+
     -h -1          apply no highpass filtering.
     -h 0           apply linear detrending only.
-    -h <highpass>  with a positive <highpass> value, apply highpass with <highpass> being full-width (2*sigma) in seconds.
-    -m : optionally also cleanup motion confounds, with highpass filtering of motion confounds controlled by -h:
-       - if -h is omitted, fix will look to see if a design.fsf file is present, to find the highpass cutoff.
-       - if -h is omitted, and no design.fsf is present, no filtering of the motion confounds will take place.
-    -A : apply aggressive (full variance) cleanup, instead of the default less-aggressive (unique variance) cleanup.
+    -h <highpass>  with a positive <highpass> value, apply highpass with
+                   <highpass> being full-width (2*sigma) in seconds.
+
+    -m             optionally also cleanup motion confounds, with highpass
+                   filtering of motion confounds controlled by -h:
+                    - if -h is omitted, fix will look to see if a design.fsf
+                      file is present, to find the highpass cutoff.
+                    - if -h is omitted, and no design.fsf is present, no
+                      filtering of the motion confounds will take place.
+
+    -A             apply aggressive (full variance) cleanup, instead of the
+                   default less-aggressive (unique variance) cleanup.
 '''
 
 FIXDIR = 'fix'
