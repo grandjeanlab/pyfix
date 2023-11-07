@@ -102,6 +102,12 @@ def generate_file_table(*args):
     return d
 
 
+def generate_label_filename(meldir, modelfile, threshold):
+    model     = op.splitext(op.basename(modelfile))[0]
+    threshold = int(threshold)
+    return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
+
+
 def read_labels(filename: str):
     """Read legacy label files, melview and hand_labels_noise.txt"""
 
@@ -195,80 +201,3 @@ def __tpr(cm):
         tpr = tp / (tp + fn)
 
     return tpr
-
-
-# class FixLegacyClassifier(BaseEstimator, ClassifierMixin):
-#     """FMRIB's ICA-based Xnoiseifier."""
-#
-#     def __init__(self, n_jobs=1):
-#         self.n_jobs = n_jobs
-#
-#     def fit(self, X, y, labels=None):
-#         # if labels is None:
-#         #     # loo = cv.LeaveOneOut()
-#         #     loo = cv.StratifiedKFold(y, n_folds=5)
-#         # else:
-#         #     loo = cv.LeaveOneLabelOut(labels)
-#         loo = LeaveOneOut()
-#
-#
-#         self.classes_, indices = np.unique(y, return_inverse=True)
-#
-#         # SVM - RBF
-#         self.base1 = svm.SVC(probability=True, class_weight="balanced",
-#                              kernel='rbf', gamma='scale')
-#         Y1 = cross_val_predict(self.base1, X, y, cv=loo, verbose=1,
-#                                   n_jobs=self.n_jobs)
-#         self.base1.fit(X, y)
-#
-#         # SVM - Linear
-#         self.base2 = svm.SVC(probability=True, class_weight="balanced",
-#                              kernel='linear')
-#         Y2 = cross_val_predict(self.base2, X, y, cv=loo, verbose=1,
-#                                   n_jobs=self.n_jobs)
-#         self.base2.fit(X, y)
-#
-#         # SVM - polynomial
-#         self.base3 = svm.SVC(probability=True, class_weight="balanced",
-#                              kernel='poly')
-#         Y3 = cross_val_predict(self.base3, X, y, cv=loo, verbose=1,
-#                                   n_jobs=self.n_jobs)
-#         self.base3.fit(X, y)
-#
-#         # k-NN
-#         self.base4 = neighbors.KNeighborsClassifier()
-#         Y4 = cross_val_predict(self.base4, X, y, cv=loo, verbose=1,
-#                                   n_jobs=self.n_jobs)
-#         self.base4.fit(X, y)
-#
-#         # decision tree
-#         self.base5 = tree.DecisionTreeClassifier()
-#         Y5 = cross_val_predict(self.base5, X, y, cv=loo, verbose=1,
-#                                   n_jobs=self.n_jobs)
-#         self.base5.fit(X, y)
-#
-#         # decision fusion
-#         # self.fusion = svm.SVC(probability=False, class_weight="balanced",
-#         #                       kernel='rbf')
-#         self.fusion = ensemble.RandomForestClassifier(class_weight="balanced")
-#
-#         Xf = np.vstack((Y1, Y2, Y3, Y4, Y5)).T
-#         self.fusion.fit(Xf, y)
-#
-#         # self.majority_ = np.argmax(np.bincount(indices))
-#         return self
-#
-#     def predict(self, X):
-#         D1 = self.base1.predict(X)
-#         D2 = self.base2.predict(X)
-#         D3 = self.base3.predict(X)
-#         D4 = self.base4.predict(X)
-#         D5 = self.base5.predict(X)
-#
-#         Xf = np.vstack((D1, D2, D3, D4, D5)).T
-#         D = self.fusion.predict(Xf)
-#
-#         # return self.classes_[np.argmax(D, axis=1)]
-#         return D
-
-
