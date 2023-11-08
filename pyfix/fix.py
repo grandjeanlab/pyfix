@@ -230,9 +230,12 @@ def run_classify(meldir, model, threshold):
     return label_file
 
 
-def run_evaluate(meldir, model):
+def run_evaluate(meldir, model, thresholds):
 
-    thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
+    if thresholds is not None:
+        thresholds = [int(t) for t in thresholds.split(',')]
+    else:
+        thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
 
     for md in meldir:
         assert_has_hand_labels(md)
@@ -242,7 +245,7 @@ def run_evaluate(meldir, model):
         if not op.exists(label_file):
             run_classify(md, model, threshold)
 
-    legacy.report_evaluate(meldir, model, thresholds)
+    print(legacy.report_evaluate(meldir, model, thresholds))
 
 
 def run_apply(labels, motion, highpass, aggressive):
@@ -380,6 +383,7 @@ def main():
     eval_parser = argparse.ArgumentParser(add_help=False)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
+    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...')
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
