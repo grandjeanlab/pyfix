@@ -168,6 +168,9 @@ def report_evaluate(meldirs, model, thresholds):
 
     all_results = df.pivot(index='Dataset', columns='Threshold', values=['TPR', 'TNR'])
     all_results = all_results.sort_index(axis='columns', level='Threshold')
+    all_results.insert(0, 'Dataset', all_results.index)
+    all_results.set_index(np.arange(len(all_results)), inplace=True)
+    all_results.index.name = 'ID'
 
     fmt_func    = lambda f: f'{f:0.2f}'
     report_str  = all_results.to_string(float_format=fmt_func)
