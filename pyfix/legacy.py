@@ -146,7 +146,7 @@ def prob_threshold(pb, threshold, col=1):
 def report_evaluate(meldirs, model, thresholds):
 
     columns = ['Dataset', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4']
-    results = pd.DataFrame(index=np.arange(len(meldirs) * len(thresholds)),
+    df      = pd.DataFrame(index=np.arange(len(meldirs) * len(thresholds)),
                            columns=columns)
 
     row = 0
@@ -163,10 +163,24 @@ def report_evaluate(meldirs, model, thresholds):
             cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])
             tpr, tnr, weighted = fix_metric(cm)
 
-            results.loc[row, columns] = (dataset, threshold, tpr, tnr, weighted)
+            df.loc[row, columns] = (dataset, threshold, tpr, tnr, weighted)
             row += 1
 
-    print(results.to_string())
+    all_results = df.pivot(index='Dataset', columns='Threshold', values=['TPR', 'TNR'])
+    all_results = all_results.sort_index(axis='columns', level='Threshold')
+
+    fmt_func    = lambda f: f'{f:0.2f}'
+    report_str  = all_results.to_string(float_format=fmt_func)
+
+    group = df.drop('Dataset', axis=1).groupby('Threshold')
+
+    report_str += '\n\nMean\n'
+    report_str += group.mean().T.to_string(float_format=fmt_func)
+    report_str += '\n\nMedian\n'
+    report_str += group.median().T.to_string(float_format=fmt_func)
+    report_str += '\n\n\n---\nTPR==True Positive (signal) rate\nTPR==True Negative (noise) rate\n'
+
+    return report_str
 
 
 def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50), labels=[0, 1]):
@@ -183,13 +197,14 @@ def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50), 
             tpr, tnr, weighted = fix_metric(cm)
             records += [(fold, thr0*100, tpr, tnr, weighted)]
 
-    df = pd.DataFrame(records, columns=('Fold', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4'))
+    df       = pd.DataFrame(records, columns=('Fold', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4'))
+    fmt_func = lambda f: f'{f:0.2f}'
 
-    df_str = df.pivot(index='Fold', columns='Threshold').to_string()
+    df_str = df.pivot(index='Fold', columns='Threshold').to_string(float_format=fmt_func)
     df_str += '\n\nMean\n'
-    df_str += df.groupby('Threshold').mean().T.drop(index='Fold').to_string()
+    df_str += df.groupby('Threshold').mean().T.drop(index='Fold').to_string(float_format=fmt_func)
     df_str += '\n\nMedian\n'
-    df_str += df.groupby('Threshold').median().T.drop(index='Fold').to_string()
+    df_str += df.groupby('Threshold').median().T.drop(index='Fold').to_string(float_format=fmt_func)
 
     df_str += '\n\n\n---\nTPR==True Positive (signal) rate\nTPR==True Negative (noise) rate\n'
 
