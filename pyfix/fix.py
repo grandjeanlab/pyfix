@@ -5,6 +5,7 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 
 import argparse
 import importlib
+import itertools as it
 import logging
 import os
 import os.path as op
@@ -25,11 +26,18 @@ Simple usage, assuming training data already exists:
 
   fix <mel.ica> <training.pyfix_model> <thresh>  [fix -a options]
     Extract features, classify and run cleanup - equivalent to:
-      fix -f <mel.ica> ; fix -c <mel.ica> <train>.pyfix_model <thresh> ; fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
+      fix -f <mel.ica> ;
+      fix -c <mel.ica> <train>.pyfix_model <thresh> ;
+      fix -a <mel.ica>/fix4melview_<train>_<thresh>.txt [-a options]
+
     For the [fix -a options], see "fix -a" usage below.
-    The first argument should be a FEAT/MELODIC output directory that includes a filtered_func_data.ica melodic output.
-    Example:    fix study1/subject1.ica /usr/local/FIX/HCP_noHP.pyfix_model 20 -m -h 200
-    Example:    fix subject2.feat /home/FIX/Standard_noHP.pyfix_model 20 -m   (ICA must have been turned on in FEAT pre-stats)
+    The first argument should be a FEAT/MELODIC output directory
+    that includes a filtered_func_data.ica melodic output.
+
+    Example:    fix study1/subject1.ica HCP_noHP.pyfix_model 20 -m -h 200
+    Example:    fix subject2.feat Standard_noHP.pyfix_model 20 -m
+
+    (ICA must have been turned on in FEAT pre-stats)
 
 Usage for each stage separately, including creation of training data:
 
@@ -37,22 +45,42 @@ Usage for each stage separately, including creation of training data:
     Feature extraction (for later training and/or classifying).
 
   fix -t <training-output-basename> [-l] <mel1.ica> <mel2.ica> ...
-    Train classifier (Training output basename followed by list of Melodic directories).
-    Every Melodic directory must contain hand_labels_noise.txt listing the artefact components, e.g.:  [1, 4, 99, ... 140].
+
+    Train classifier (Training output basename followed by list of Melodic
+    directories).  Every Melodic directory must contain hand_labels_noise.txt
+    listing the artefact components, e.g.: [1, 4, 99, ... 140].
+
     -l : optional LOO accuracy testing.
 
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
 
+  fix -C <training.pyfix_model> <mel1.ica> <mel2.ica> ...
+
+    Classify components for all listed Melodic directories over a range of
+    thresholds and produce LOO-style accuracy testing using existing hand
+    classifictions.  Every Melodic directory must contain hand_labels_noise.txt
+    listing the artefact components, e.g.: [1, 4, 99, ... 140].
+
   fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
-    Apply cleanup, using artefacts listed in the .txt file, to the data inside the enclosing Feat/Melodic directory.
+
+    Apply cleanup, using artefacts listed in the .txt file, to the data inside
+    the enclosing Feat/Melodic directory.
+
     -h -1          apply no highpass filtering.
     -h 0           apply linear detrending only.
-    -h <highpass>  with a positive <highpass> value, apply highpass with <highpass> being full-width (2*sigma) in seconds.
-    -m : optionally also cleanup motion confounds, with highpass filtering of motion confounds controlled by -h:
-       - if -h is omitted, fix will look to see if a design.fsf file is present, to find the highpass cutoff.
-       - if -h is omitted, and no design.fsf is present, no filtering of the motion confounds will take place.
-    -A : apply aggressive (full variance) cleanup, instead of the default less-aggressive (unique variance) cleanup.
+    -h <highpass>  with a positive <highpass> value, apply highpass with
+                   <highpass> being full-width (2*sigma) in seconds.
+
+    -m             optionally also cleanup motion confounds, with highpass
+                   filtering of motion confounds controlled by -h:
+                    - if -h is omitted, fix will look to see if a design.fsf
+                      file is present, to find the highpass cutoff.
+                    - if -h is omitted, and no design.fsf is present, no
+                      filtering of the motion confounds will take place.
+
+    -A             apply aggressive (full variance) cleanup, instead of the
+                   default less-aggressive (unique variance) cleanup.
 '''
 
 FIXDIR = 'fix'
@@ -109,6 +137,8 @@ def create_model():
     if model is None and len(params) == 0:
         model  = 'sklearn.ensemble.RandomForestClassifier'
         params = {'n_estimators' : 50}
+    elif model is None:
+        model  = 'sklearn.ensemble.RandomForestClassifier'
 
     mod, cls = model.rsplit('.', 1)
     mod      = importlib.import_module(mod)
@@ -187,18 +217,35 @@ def run_classify(meldir, model, threshold):
     clf = io.load_model(model)
     ypb = classify.classify(features0, clf)[1]
 
-    threshold = threshold / 100
-    y = legacy.prob_threshold(ypb, threshold=threshold)
+    y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
     # TODO: move legacy label saving to legacy module
     # invert y so that signal==False and noise==True (as per legacy fix4melview files)
     y = ~y
     labels = [['Noise'] if i else ['Signal'] for i in y]
 
-    label_fname = f'{meldir}/fix4melview_{op.splitext(op.basename(model))[0]}_thr{int(threshold*100)}.txt'
-    fixlabels.saveLabelFile(labels, label_fname, meldir)
+    label_file = legacy.generate_label_filename(meldir, model, threshold)
+    fixlabels.saveLabelFile(labels, label_file, meldir)
 
-    return label_fname
+    return label_file
+
+
+def run_evaluate(meldir, model, thresholds):
+
+    if thresholds is not None:
+        thresholds = [int(t) for t in thresholds.split(',')]
+    else:
+        thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
+
+    for md in meldir:
+        assert_has_hand_labels(md)
+
+    for md, threshold in it.product(meldir, thresholds):
+        label_file = legacy.generate_label_filename(md, model, threshold)
+        if not op.exists(label_file):
+            run_classify(md, model, threshold)
+
+    print(legacy.report_evaluate(meldir, model, thresholds))
 
 
 def run_apply(labels, motion, highpass, aggressive):
@@ -332,6 +379,12 @@ def main():
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
 
+    # EVALUATE parser
+    eval_parser = argparse.ArgumentParser(add_help=False)
+    eval_parser.add_argument('model', metavar='<training.pyfix_model>')
+    eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
+    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...')
+
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
     apply_parser.add_argument('labels', metavar='<mel.ica/fix4melview_TRAIN_thr.txt>')
@@ -356,12 +409,14 @@ def main():
         sys.exit()
     elif switch == '-t':
         args = train_parser.parse_args(sys.argv[2:])
-        # set_log_file(args.basename, mode='w')
         run_train(**vars(args))
     elif switch == '-c':
         args = classify_parser.parse_args(sys.argv[2:])
         set_log_file(args.meldir, mode='a')
         run_classify(**vars(args))
+    elif switch == '-C':
+        args = eval_parser.parse_args(sys.argv[2:])
+        run_evaluate(**vars(args))
     elif switch == '-a':
         args = apply_parser.parse_args(sys.argv[2:])
         set_log_file(op.dirname(args.labels), mode='a')
