@@ -1,28 +1,23 @@
 #!/usr/bin/env python
-import numpy as np
-import pandas as pd
-import joblib
-import nibabel as nb
+
+import            base64
+import            io
+import            json
+import            logging
 import os.path as op
-import os
-import logging
+import            os
+
+import            joblib
+import nibabel as nb
+import numpy   as np
+import pandas  as pd
+import            sklearn
+import            xgboost
+
+import            pyfix
+
 
 log = logging.getLogger(__name__)
-
-
-# def read_ic_maps(filename):
-#
-#     if filename.endswith('.nii') or filename.endswith('.nii.gz'):
-#         d = nb.load(filename)
-#     else:
-#         raise RuntimeError(f'unknown filetype: {filename}')
-#
-#     return d
-#
-#
-# def read_ic_timeseries(filename):
-#
-#     if op
 
 
 def read_file_table(filename):
@@ -121,77 +116,18 @@ def save_features(filename, features):
     features.to_csv(filename, index=None)
 
 
-
-def load_model(fname):
-    """
-    Load pyFIX model.
-
-    Args:
-        fname:
-
-    Returns:
-
-    """
-    return joblib.load(fname)
-
-
-def save_model(fname, mdl):
-    """
-    Save pyFIX model.
-
-    Args:
-        fname:
-        mdl:
-
-    Returns:
-
-    """
-
-    if not fname.endswith('.pyfix_model'):
-        fname = fname + '.pyfix_model'
-
-    if op.exists(fname):
-        log.warning(f'Model file already exists: {fname}')
-
-    workdir = op.expanduser(op.dirname(fname))
-    workdir = './' if workdir == '' else workdir
-
-    if not op.exists(workdir):
-        os.makedirs(workdir)
-
-    log.info(f'Saving trained model to: {fname}')
-    joblib.dump(mdl, fname)
-
-
-# @pd.api.extensions.register_dataframe_accessor("filetable")
-# class FileTableAccessor:
-#     def __init__(self, pandas_obj):
-#         self._validate(pandas_obj)
-#         self._obj = pandas_obj
-#
-#     @staticmethod
-#     def _validate(obj):
-#         # verify there is a column latitude and a column longitude
-#         for attribute in ['features', 'labels', 'subid']:
-#             if attribute not in obj.columns:
-#                 raise AttributeError(f"FileTable must have {attribute}.")
-#
-#
-# @pd.api.extensions.register_dataframe_accessor("feature")
-# class FeatureAccessor:
-#     def __init__(self, pandas_obj):
-#         self._validate(pandas_obj)
-#         self._obj = pandas_obj
-#
-#     @staticmethod
-#     def _validate(obj):
-#         # verify there is a column latitude and a column longitude
-#         for attribute in ['group', 'label']:
-#             if attribute not in obj.columns:
-#                 raise AttributeError(f"FeatureTable must have {attribute}.")
-
-
 def load_motion_parameters(fname):
+    """Load motion parameters from one of:
+      - MCFLIRT output files
+      - eddy output files
+      - BIDS motion parameter files
+
+    Args:
+       fname: File containing motion parameters
+
+    Returns:
+       pandas.DataFrame containing trans_[x,y,z] and rot_[x,y,z] columns.
+    """
     log.info(f'Load motion parameters: {fname}')
 
     if fname.endswith('.par'):
@@ -215,3 +151,145 @@ def load_motion_parameters(fname):
         raise RuntimeError('Unknown motion parameter filetype')
 
     return mp
+
+
+def save_model(fname, model):
+    """Save a pyFIX model to file.
+
+    Args:
+        fname: file to which the model should be saved
+        model: model to save
+
+    Note that the pyfix model file format is subject to change without notice
+    between versions. However, the developers strive to guarantee backwards-
+    compatibility (notwithstanding the limitations imposed by scikit-learn as
+    outlined below), so old pyfix model files should be able to be loaded.
+    Saved pyfix model files are *not* guaranteed to be forward-compatible -
+    i.e. a model file saved with a particular pyfix version is not guaranteed
+    to work with an older version of pyfix.
+
+    Pyfix 0.4.0
+    -----------
+
+    Pyfix models are saved as a plain-text file which begins with "PYFIX\n" and
+    then contains the following JSON-encoded structure:
+
+        {
+            "pyfix_version"   : "<pyfix-version>",
+            "sklearn_version" : "<sklearn-version>",
+            "xgboost_version" : "<xgboost-version>",
+            "model_type"      : "<model-type>",
+            "model_contents"  : "<model-contents>"
+        }
+
+    where:
+
+      - <pyfix-version> is the version of pyfix used to save the model
+      - <sklearn-version> is the version of scikit-learn used to save the model
+        (if relevant)
+      - <xgboost-version> is the version of xgboost used to save the model (if
+        relevant)
+      - <model-type> is one of "xgboost" or "sklearn"
+      - <model-contents> is the base64-encoded serialised model object.
+
+    At the moment we are able to save:
+
+     - xgboost.XGBoostClassifier models. These are saved in the "Universal
+       Binary JSON" format, which is a backwards-compatible format - i.e. a
+       model created and saved with a particular version of xgboost is able
+       to be loaded and used with newer versions of xgboost.
+
+     - scikit-learn classifiers. At the moment these are saved using
+       joblib.dump, which unfortunately means that they are only guaranteed
+       to work with the same scikit-learn version.
+
+    See these pages for more details:
+
+      - https://xgboost.readthedocs.io/en/stable/tutorials/saving_model.html
+      - https://scikit-learn.org/stable/model_persistence.html
+      - https://joblib.readthedocs.io/en/stable/persistence.html#persistence
+
+
+    Pyfix 0.3.0
+    -----------
+
+    Pyfix models are saved using joblib.dump. A saved model file is only
+    guaranteed to work with the same scikit-learn version.
+    """
+
+    if not fname.endswith('.pyfix_model'):
+        fname = fname + '.pyfix_model'
+
+    if isinstance(model, xgboost.XGBClassifier):
+        model_type = 'xgboost'
+        # xgboost.save_model doesn't have the
+        # ability to dump to memory, so we save
+        # to a temp file and read it back in
+        with tempfile.TemporaryDirectory() as tdir:
+            tmpfile = op.join(tdir, 'model.json')
+            model.save_model(tmpfile)
+            with open(tmpfile, 'rb') as f:
+                dumped_model = f.read()
+
+    elif isinstance(model, sklearn.base.ClassifierMixin):
+        model_type = 'sklearn'
+        with io.BytesIO() as f:
+            joblib.dump(model, f)
+            dumped_model = f.getvalue()
+
+    else:
+        raise RuntimeError(f'Unsupported model: {type(model)}')
+
+    dumped_model = base64.b64encode(dumped_model).decode()
+    to_save      = {
+        'pyfix_version'   : pyfix.__version__,
+        'sklearn_version' : sklearn.__version__,
+        'xgboost_version' : xgboost.__version__,
+        'model_type'      : model_type,
+        'model_contents'  : dumped_model,
+    }
+
+    if op.exists(fname):
+        log.warning(f'Model file already exists - overwriting: {fname}')
+
+    fdir = op.abspath(op.expanduser(op.dirname(fname)))
+    if not op.exists(fdir):
+        os.makedirs(fdir)
+
+    log.info(f'Saving trained model to: {fname}')
+    with open(fname, 'wt', encoding='utf-8') as f:
+        f.write('PYFIX\n')
+        json.dump(to_save, f)
+
+
+def load_model(fname):
+    """
+    Load pyFIX model. See save_model for important information on the
+    pyfix model file format, and compatibility considerations.
+
+    Args:
+        fname: File to load
+
+    Returns:
+        A model object, such as a sklearn or xgboost classifier.
+    """
+
+    # Sniff the first few bytes of
+    # the file to see what we have
+    with open(fname, 'rb') as f:
+         header = f.read(6)
+
+    # pyfix < 0.4.0
+    if header.decode(errors='ignore') != 'PYFIX\n':
+
+        # TODO can we print a warning about sklearn version here?
+        model = joblib.load(fname)
+        return model
+
+    # pyfix >= 0.4.0 file
+    with open(fname, 'rt') as f:
+        f.seek(6)
+        model = json.load(f)
+
+        # TODO check sklearn version and warn if not compatible
+        model = base64.b64decode(model['pyfix_model'].encode('utf-8'))

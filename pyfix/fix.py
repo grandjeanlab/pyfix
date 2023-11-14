@@ -116,8 +116,8 @@ def assert_has_hand_labels(meldir):
 
 
 def create_model():
-    """Create the scikit learn classifier that is used for training and
-    classification. By default a RandomForestClassifier is created, but
+    """Create the xgboost or scikit learn classifier that is used for training
+    and classification. By default a XGBoostClassifier is created, but
     this can be customised with environment variables.
 
     The classifier class can be specified via the "PYFIX_MODEL" environment
@@ -134,11 +134,8 @@ def create_model():
     params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
     params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
 
-    if model is None and len(params) == 0:
-        model  = 'sklearn.ensemble.RandomForestClassifier'
-        params = {'n_estimators' : 50}
-    elif model is None:
-        model  = 'sklearn.ensemble.RandomForestClassifier'
+    if model is None:
+        model = 'xgboost.XGBClassifier'
 
     mod, cls = model.rsplit('.', 1)
     mod      = importlib.import_module(mod)

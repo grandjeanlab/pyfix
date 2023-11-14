@@ -25,6 +25,8 @@ from sklearn.metrics import check_scoring
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.utils import check_random_state
 
+from xgboost import XGBClassifier
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -304,7 +306,7 @@ class LooResults:
 
 
 def train(table: pd.DataFrame,
-          model=None,
+          model,
           loo=False,
           n_jobs=None):
     # TODO: these cols should probably get dropped prior to train
@@ -322,9 +324,6 @@ def train(table: pd.DataFrame,
     group = table['group'].values
 
     feature_labels = list(table.drop(columns=drop_cols, errors='ignore'))
-
-    if model is None:
-        model = ensemble.RandomForestClassifier(n_esimators=50)
 
     output = (model.fit(X, y),)
 
