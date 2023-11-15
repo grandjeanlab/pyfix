@@ -117,42 +117,6 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def create_model(model):
-    """Create the xgboost or scikit learn classifier that is used for training
-    and classification. By default a XGBoostClassifier is created,
-
-    The classifier type can be specified via the "PYFIX_MODEL" environment
-    variable, e.g.
-
-        PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
-
-    Initialisation parameters can be set via "PYFIX_MODEL_<parameter>"
-    environment variables, e.g:
-
-        PYFIX_MODEL_n_estimators=100
-    """
-    if model is None:
-        model = os.environ.get('PYFIX_MODEL', None)
-
-    if model is None:
-        model = 'xgboost.XGBClassifier'
-
-    if model.startswith('xgboost') and weak_import('xgboost') is None:
-        model = 'sklearn.ensemble.RandomForestClassifier'
-        log.warning(f'xgboost is not installed - falling back to {model}')
-
-    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
-    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
-
-    log.info(f'Using {model}')
-
-    mod, cls = model.rsplit('.', 1)
-    mod      = importlib.import_module(mod)
-    cls      = getattr(mod, cls)
-
-    return cls(**params)
-
-
 def run_feature_extraction(meldir):
 
     assert_is_melodic_dir(meldir)
@@ -194,9 +158,6 @@ def run_train(basename, meldir, loo, model=None):
     training_data = classify.collate_features(file_table, legacy_features=True)
 
     # TODO: save collated features
-
-    # create classifier
-    model = create_model(model)
 
     # classify
     clf, loo_result = classify.train(training_data, model=model, loo=loo)

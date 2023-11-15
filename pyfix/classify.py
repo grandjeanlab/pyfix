@@ -7,8 +7,10 @@ import matplotlib as mpl
 mpl.use('Agg')
 
 import logging
+import os
 from copy import deepcopy
 from dataclasses import dataclass
+import importlib
 from typing import List
 from typing import Union
 
@@ -29,6 +31,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from pyfix import io, legacy
+from pyfix.util import weak_import
 
 log = logging.getLogger(__name__)
 
@@ -303,8 +306,44 @@ class LooResults:
         return str0
 
 
+def create_model(model=None):
+    """Create the xgboost or scikit learn classifier that is used for training
+    and classification. By default a XGBoostClassifier is created,
+
+    The classifier type can be specified via the "PYFIX_MODEL" environment
+    variable, e.g.
+
+        PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
+
+    Initialisation parameters can be set via "PYFIX_MODEL_<parameter>"
+    environment variables, e.g:
+
+        PYFIX_MODEL_n_estimators=100
+    """
+    if model is None:
+        model = os.environ.get('PYFIX_MODEL', None)
+
+    if model is None:
+        model = 'xgboost.XGBClassifier'
+
+    if model.startswith('xgboost') and weak_import('xgboost') is None:
+        model = 'sklearn.ensemble.RandomForestClassifier'
+        log.warning(f'xgboost is not installed - falling back to {model}')
+
+    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
+    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
+
+    log.info(f'Using {model}')
+
+    mod, cls = model.rsplit('.', 1)
+    mod      = importlib.import_module(mod)
+    cls      = getattr(mod, cls)
+
+    return cls(**params)
+
+
 def train(table: pd.DataFrame,
-          model,
+          model=None,
           loo=False,
           n_jobs=None):
     # TODO: these cols should probably get dropped prior to train
@@ -320,6 +359,8 @@ def train(table: pd.DataFrame,
     X = table.drop(columns=drop_cols, errors='ignore').values
     y = table['label'].astype(int).values
     group = table['group'].values
+
+    model = create_model(model)
 
     feature_labels = list(table.drop(columns=drop_cols, errors='ignore'))
 

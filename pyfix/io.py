@@ -21,7 +21,7 @@ import pyfix
 from pyfix.util import weak_import
 
 
-xgboost = util.weak_import('xgboost')
+xgboost = weak_import('xgboost')
 
 
 log = logging.getLogger(__name__)
@@ -315,9 +315,10 @@ def load_model(fname):
     def load_new_pyfix_model_file():
         log.debug(f'Loading pyfix >= 0.4.0 file: {fname}')
 
-        f.seek(6)
+        with open(fname, 'rt') as f:
+            f.seek(6)
+            loaded = json.load(f)
 
-        loaded = json.load(f)
         mtype  = loaded['model_type']
         mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
@@ -354,7 +355,7 @@ def load_model(fname):
     with open(fname, 'rb') as f:
          header = f.read(6)
 
-    if header.decode(errors='ignore') != 'PYFIX\n':
-        return load_old_pyfix_model_file()
-    else:
+    if header == b'PYFIX\n':
         return load_new_pyfix_model_file()
+    else:
+        return load_old_pyfix_model_file()
