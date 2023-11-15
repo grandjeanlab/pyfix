@@ -18,6 +18,8 @@ from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis, melodicimage
 
 from pyfix import extract, feature, legacy, io, classify, clean, __version__
+from pyfix.util import weak_import
+
 
 USAGE = f'''
 FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
@@ -115,12 +117,11 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def create_model():
+def create_model(model):
     """Create the xgboost or scikit learn classifier that is used for training
-    and classification. By default a XGBoostClassifier is created, but
-    this can be customised with environment variables.
+    and classification. By default a XGBoostClassifier is created,
 
-    The classifier class can be specified via the "PYFIX_MODEL" environment
+    The classifier type can be specified via the "PYFIX_MODEL" environment
     variable, e.g.
 
         PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
@@ -130,12 +131,20 @@ def create_model():
 
         PYFIX_MODEL_n_estimators=100
     """
-    model  = os.environ.get('PYFIX_MODEL', None)
-    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
-    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
+    if model is None:
+        model = os.environ.get('PYFIX_MODEL', None)
 
     if model is None:
         model = 'xgboost.XGBClassifier'
+
+    if model.startswith('xgboost') and weak_import('xgboost') is None:
+        model = 'sklearn.ensemble.RandomForestClassifier'
+        log.warning(f'xgboost is not installed - falling back to {model}')
+
+    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
+    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
+
+    log.info(f'Using {model}')
 
     mod, cls = model.rsplit('.', 1)
     mod      = importlib.import_module(mod)
@@ -170,7 +179,7 @@ def run_feature_extraction(meldir):
     legacy.save_features(op.join(meldir, FIXDIR), f)
 
 
-def run_train(basename, meldir, loo):
+def run_train(basename, meldir, loo, model=None):
 
     for d in meldir:
         assert_has_features(d)
@@ -187,7 +196,7 @@ def run_train(basename, meldir, loo):
     # TODO: save collated features
 
     # create classifier
-    model = create_model()
+    model = create_model(model)
 
     # classify
     clf, loo_result = classify.train(training_data, model=model, loo=loo)
@@ -368,6 +377,7 @@ def main():
     train_parser = argparse.ArgumentParser(add_help=False)
     train_parser.add_argument('basename', metavar='<training-output-basename>')
     train_parser.add_argument('-l', '--loo', action='store_true')
+    train_parser.add_argument('-m', '--model')
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser

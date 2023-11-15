@@ -10,7 +10,15 @@ import nibabel as nb
 import numpy as np
 import json
 
+
 log = logging.getLogger(__name__)
+
+
+def weak_import(name):
+    try:
+        return __import__(name)
+    except ImportError:
+        return None
 
 
 def run(cmd: List[str]) -> str:

@@ -25,8 +25,6 @@ from sklearn.metrics import check_scoring
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.utils import check_random_state
 
-from xgboost import XGBClassifier
-
 import seaborn as sns
 import matplotlib.pyplot as plt
 

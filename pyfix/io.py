@@ -14,11 +14,14 @@ import nibabel as nb
 import numpy   as np
 import pandas  as pd
 import            sklearn
-import            xgboost
-
-import            pyfix
 
 from sklearn.exceptions import InconsistentVersionWarning
+
+import pyfix
+from pyfix.util import weak_import
+
+
+xgboost = util.weak_import('xgboost')
 
 
 log = logging.getLogger(__name__)
@@ -224,7 +227,7 @@ def save_model(fname, model):
     if not fname.endswith('.pyfix_model'):
         fname = fname + '.pyfix_model'
 
-    if isinstance(model, xgboost.XGBClassifier):
+    if (xgboost is not None) and isinstance(model, xgboost.XGBClassifier):
         model_type = 'xgboost'
         # xgboost.save_model doesn't have the
         # ability to dump to memory, so we save
@@ -249,7 +252,7 @@ def save_model(fname, model):
     to_save      = {
         'pyfix_version'   : pyfix.__version__,
         'sklearn_version' : sklearn.__version__,
-        'xgboost_version' : xgboost.__version__,
+        'xgboost_version' : getattr(xgboost, '__version__', ''),
         'model_type'      : model_type,
         'model_contents'  : dumped_model,
     }
@@ -319,6 +322,12 @@ def load_model(fname):
         mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
         if mtype == 'xgboost':
+
+            if xgboost is None:
+                raise RuntimeError(f'Pyfix model file {fname} contains a '
+                                   'xgboost classifier, but xgboost is not '
+                                   'installed! You need to install xgboost '
+                                   'in order to use this model.')
 
             model = xgboost.XGBClassifier()
             model.load_model(bytearray(mdata))
