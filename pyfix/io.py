@@ -6,6 +6,8 @@ import            json
 import            logging
 import os.path as op
 import            os
+import            tempfile
+import            warnings
 
 import            joblib
 import nibabel as nb
@@ -15,6 +17,8 @@ import            sklearn
 import            xgboost
 
 import            pyfix
+
+from sklearn.exceptions import InconsistentVersionWarning
 
 
 log = logging.getLogger(__name__)
@@ -238,7 +242,8 @@ def save_model(fname, model):
             dumped_model = f.getvalue()
 
     else:
-        raise RuntimeError(f'Unsupported model: {type(model)}')
+        raise RuntimeError(f'Unsupported model {type(model)}! Pyfix only '
+                           'recognises scikit-learn or xgboost classifiers')
 
     dumped_model = base64.b64encode(dumped_model).decode()
     to_save      = {
@@ -274,22 +279,73 @@ def load_model(fname):
         A model object, such as a sklearn or xgboost classifier.
     """
 
+    sklearn_warning = (
+        'Pyfix model file {fname} was saved with a different version of '
+        'scikit-learn: {oldver}! You are using scikit-learn {skver}. You may '
+        'experience errors loading or using this model. If you experience '
+        'errors, the only work-around is to use the same version of '
+        'scikit-learn that was used to save the model.')
+
+    # pyfix < 0.4.0 - a sklearn classifier
+    # stored with raw joblib.dump output.
+    def load_old_pyfix_model_file():
+        log.debug(f'Loading pyfix < 0.4.0 file using joblib: {fname}')
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', InconsistentVersionWarning)
+
+            try:
+                model = joblib.load(fname)
+            except InconsistentVersionWarning as e:
+                skver  = sklearn.__version__
+                oldver = e.original_sklearn_version
+
+                log.warning(sklearn_warning.format(
+                    fname=fname, skver=skver, oldver=oldver))
+
+                model = joblib.load(fname)
+
+        return model
+
+    # pyfix >= 0.4.0 file - format as
+    # described in the save_model docs.
+    def load_new_pyfix_model_file():
+        log.debug(f'Loading pyfix >= 0.4.0 file: {fname}')
+
+        f.seek(6)
+
+        loaded = json.load(f)
+        mtype  = loaded['model_type']
+        mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
+
+        if mtype == 'xgboost':
+
+            model = xgboost.XGBClassifier()
+            model.load_model(bytearray(mdata))
+
+        elif mtype == 'sklearn':
+
+            oldver = loaded['sklearn_version']
+            skver  = sklearn.__version__
+            if skver != oldver:
+                log.warning(sklearn_warning.format(
+                    fname=fname, skver=skver, oldver=oldver))
+
+            with io.BytesIO(mdata) as f:
+                model = joblib.load(f)
+        else:
+            raise RuntimeError(f'Unrecognised model {type(model)}! This '
+                               f'version of Pyfix ({pyfix.__version__}) '
+                               'only recognises scikit-learn or xgboost '
+                               'classifiers')
+        return model
+
     # Sniff the first few bytes of
     # the file to see what we have
     with open(fname, 'rb') as f:
          header = f.read(6)
 
-    # pyfix < 0.4.0
     if header.decode(errors='ignore') != 'PYFIX\n':
-
-        # TODO can we print a warning about sklearn version here?
-        model = joblib.load(fname)
-        return model
-
-    # pyfix >= 0.4.0 file
-    with open(fname, 'rt') as f:
-        f.seek(6)
-        model = json.load(f)
-
-        # TODO check sklearn version and warn if not compatible
-        model = base64.b64decode(model['pyfix_model'].encode('utf-8'))
+        return load_old_pyfix_model_file()
+    else:
+        return load_new_pyfix_model_file()
