@@ -163,7 +163,7 @@ def run_train(basename, meldir, loo, model=None):
     clf, loo_result = classify.train(training_data, model=model, loo=loo)
 
     if loo:
-        report = legacy.report_loo(loo_result.actual, loo_result.predicted_pb, loo_result.idx)
+        report = legacy.report_loo(*loo_result)
         with open(basename+"_LOO_results", 'w') as f:
             f.write(report)
 
