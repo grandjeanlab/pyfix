@@ -46,13 +46,14 @@ Usage for each stage separately, including creation of training data:
   fix -f <mel.ica>
     Feature extraction (for later training and/or classifying).
 
-  fix -t <training-output-basename> [-l] <mel1.ica> <mel2.ica> ...
+  fix -t <training-output-basename> [-l|-u] <mel1.ica> <mel2.ica> ...
 
     Train classifier (Training output basename followed by list of Melodic
     directories).  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
     -l : optional LOO accuracy testing.
+    -u : optional hyperparameter optimisation using Optuna (if installed).
 
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
@@ -121,11 +122,6 @@ def run_feature_extraction(meldir):
 
     assert_is_melodic_dir(meldir)
 
-    logging.basicConfig(
-        filename=op.join(meldir, FIXDIR, 'fix.log'),
-        level=logging.INFO,
-    )
-
     # instantiate FixData object
     d = extract.FixData.from_melodic_dir(
         meldir,
@@ -143,7 +139,15 @@ def run_feature_extraction(meldir):
     legacy.save_features(op.join(meldir, FIXDIR), f)
 
 
-def run_train(basename, meldir, loo, model=None):
+def run_train(basename, meldir, loo, tune, model_cls):
+
+    if tune:
+        loo = True
+        optuna = weak_import('optuna')
+        if optuna is None:
+            raise RuntimeError('You must install the optuna package in order '
+                               'to perform hyperparameter optimisation with '
+                               'the -u option')
 
     for d in meldir:
         assert_has_features(d)
@@ -157,10 +161,13 @@ def run_train(basename, meldir, loo, model=None):
     # read and collate all features into a training table
     training_data = classify.collate_features(file_table, legacy_features=True)
 
-    # TODO: save collated features
-
     # classify
-    clf, loo_result = classify.train(training_data, model=model, loo=loo)
+    if not tune:
+        clf, loo_result = classify.train(
+            training_data, model_cls=model_cls, loo=loo)
+    else:
+        clf = classify.tuned_train(
+            training_data, model_cls=model_cls)
 
     if loo:
         report = legacy.report_loo(*loo_result)
@@ -296,30 +303,24 @@ def run_main(meldir, model, threshold, motion, highpass, aggressive):
     run_apply(label_fname, motion, highpass, aggressive)
 
 
-def set_log_file(meldir, mode='a'):
+def set_log_file(basedir, mode='a'):
     log = logging.getLogger()
 
-    for hdlr in log.handlers[:]:  # remove all old handlers
-        log.removeHandler(hdlr)
+    for hd in log.handlers[:]:  # remove all old handlers
+        log.removeHandler(hd)
 
-    fixdir = op.join(meldir, FIXDIR)
+    hd  = logging.FileHandler(op.join(basedir, 'pyfix.log'), mode=mode)
+    fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
+                            '%(levelname)s : %(message)s')
+    hd.setFormatter(fmt)
+    log.addHandler(hd)
+    log.setLevel(logging.DEBUG)
 
-    if not op.exists(fixdir):
-        os.makedirs(fixdir)
-
-    fileh = logging.FileHandler(
-        op.join(fixdir, 'fix.log'),
-        mode=mode,
-    )
-    fileh.setFormatter(logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] %(levelname)s : %(message)s'))
-    log.addHandler(fileh)
+    # TODO optuna seems to use its own handlers which go to stdout
+    logging.getLogger('optuna').setLevel(logging.CRITICAL)
 
 
 def main():
-
-    logging.basicConfig(
-        level=logging.INFO,
-    )
 
     # MAIN parser
     main_parser = argparse.ArgumentParser(add_help=False)
@@ -337,8 +338,9 @@ def main():
     # TRAIN parser
     train_parser = argparse.ArgumentParser(add_help=False)
     train_parser.add_argument('basename', metavar='<training-output-basename>')
-    train_parser.add_argument('-l', '--loo', action='store_true')
-    train_parser.add_argument('-m', '--model')
+    train_parser.add_argument('-l', '--loo',  action='store_true')
+    train_parser.add_argument('-u', '--tune', action='store_true')
+    train_parser.add_argument('-m', '--model_cls')
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
@@ -360,38 +362,38 @@ def main():
     apply_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
-    #  PARSE
-
     if len(sys.argv) == 1:
         print(USAGE)
         sys.exit()
 
     switch = sys.argv[1]
 
-    if switch == '-f':
-        args = feature_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir, mode='w')
-        run_feature_extraction(**vars(args))
-    elif switch == '-h':
+    if switch == '-h':
         print(USAGE)
         sys.exit()
+    elif switch == '-f':
+        args = feature_parser.parse_args(sys.argv[2:])
+        set_log_file(args.meldir)
+        run_feature_extraction(**vars(args))
     elif switch == '-t':
         args = train_parser.parse_args(sys.argv[2:])
+        set_log_file(os.getcwd())
         run_train(**vars(args))
     elif switch == '-c':
         args = classify_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir, mode='a')
+        set_log_file(args.meldir)
         run_classify(**vars(args))
     elif switch == '-C':
         args = eval_parser.parse_args(sys.argv[2:])
+        set_log_file(os.getcwd())
         run_evaluate(**vars(args))
     elif switch == '-a':
         args = apply_parser.parse_args(sys.argv[2:])
-        set_log_file(op.dirname(args.labels), mode='a')
+        set_log_file(op.dirname(args.labels))
         run_apply(**vars(args))
     else:
         args = main_parser.parse_args(sys.argv[1:])
-        set_log_file(args.meldir, mode='w')
+        set_log_file(args.meldir)
         run_main(**vars(args))
 
 

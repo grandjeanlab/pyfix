@@ -12,7 +12,7 @@ import pandas as pd
 from cachetools import cached
 from cachetools.keys import hashkey
 from fsl.data import featanalysis
-from fsl.utils.filetree import FileTree
+from file_tree import FileTree
 from scipy import io
 
 import pyfix.feature as feature

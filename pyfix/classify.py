@@ -20,12 +20,15 @@ from sklearn import preprocessing
 from sklearn import ensemble
 from sklearn.base import clone
 # from sklearn.inspection import _weights_scorer
-from sklearn.metrics import check_scoring
+from sklearn import metrics
 from sklearn.model_selection import LeaveOneGroupOut
 from sklearn.utils import check_random_state
 
 from pyfix import io, legacy
 from pyfix.util import weak_import
+
+xgboost = weak_import('xgboost')
+optuna  = weak_import('optuna')
 
 log = logging.getLogger(__name__)
 
@@ -128,7 +131,7 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
     return train_data
 
 
-def create_model(model=None):
+def create_model(model_cls=None):
     """Create the xgboost or scikit learn classifier that is used for training
     and classification. By default a XGBoostClassifier is created,
 
@@ -142,33 +145,30 @@ def create_model(model=None):
 
         PYFIX_MODEL_n_estimators=100
     """
-    if model is None:
-        model = os.environ.get('PYFIX_MODEL', None)
+    if model_cls is None:
+        model_cls = os.environ.get('PYFIX_MODEL', None)
 
-    if model is None:
-        model = 'xgboost.XGBClassifier'
+    if model_cls is None:
+        model_cls = 'xgboost.XGBClassifier'
 
-    if model.startswith('xgboost') and weak_import('xgboost') is None:
-        model = 'sklearn.ensemble.RandomForestClassifier'
+    if model_cls.startswith('xgboost') and (xgboost is None):
+        model_cls = 'sklearn.ensemble.RandomForestClassifier'
         log.warning(f'xgboost is not installed - falling back to {model}')
 
     params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
     params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
 
-    log.info(f'Using {model}')
+    log.debug(f'Using {model_cls}')
 
-    mod, cls = model.rsplit('.', 1)
+    mod, cls = model_cls.rsplit('.', 1)
     mod      = importlib.import_module(mod)
     cls      = getattr(mod, cls)
 
     return cls(**params)
 
 
-def train(table: pd.DataFrame,
-          model=None,
-          loo=False,
-          n_jobs=None):
-    # TODO: these cols should probably get dropped prior to train
+def prepare_data_for_training(table):
+
     drop_cols = [
         'nic',
         *[f'pixdim:{i}' for i in np.arange(4)],
@@ -177,22 +177,53 @@ def train(table: pd.DataFrame,
         'group',
     ]
 
-    # TODO: let user define the ylabel and group cols
-    X = table.drop(columns=drop_cols, errors='ignore').values
-    y = table['label'].astype(int).values
-    group = table['group'].values
+    X      = table.drop(columns=drop_cols, errors='ignore').values
+    y      = table['label'].astype(int).values
+    groups = table['group'].values
 
-    model = create_model(model)
+    return X, y, groups
 
-    feature_labels = list(table.drop(columns=drop_cols, errors='ignore'))
 
-    output = (model.fit(X, y),)
+def train(table: pd.DataFrame,
+          model_cls=None,
+          loo=False,
+          n_jobs=None):
 
-    if loo:
-        y_pred, y_pred_pb, test_idx, trained_models = _cv_loo(model, X, y, group, n_jobs=n_jobs)
-        output += ((y, y_pred_pb, test_idx),)
+    X, y, groups = prepare_data_for_training(table)
+    model        = create_model(model_cls)
 
-    return output
+    model.fit(X, y)
+
+    if loo: loo_results = _cv_loo(model, X, y, groups, n_jobs=n_jobs)[:3]
+    else:   loo_results = None
+
+    return model, loo_results
+
+
+def tuned_train(table: pd.DataFrame, model_cls=None, n_jobs=None, n_trials=50):
+
+    X, y, groups = prepare_data_for_training(table)
+
+    def objective(trial):
+
+        model = create_model(model_cls)
+        thres = trial.suggest_int('threshold', 0, 100)
+
+        y_pred, y_pred_pb, test_idx = _cv_loo(model, X, y, groups)[:3]
+        y_pred = legacy.prob_threshold(y_pred_pb, threshold=thres / 100)
+
+        score = 0
+
+        for fold, idx in enumerate(test_idx):
+            cm = metrics.confusion_matrix(y[idx], y_pred[idx], labels=[0, 1])
+            # score += 1 - legacy.fix_metric(cm)[2]
+            score += legacy.fix_metric(cm)[2]
+
+        return score
+
+    study = optuna.create_study(direction='maximize')
+    study.enqueue_trial({'threshold' : 20})
+    results = study.optimize(objective, n_trials=n_trials)
 
 
 def _cv_loo(model, X, y, groups, n_jobs=1):
