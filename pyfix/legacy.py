@@ -8,6 +8,7 @@ from sklearn import metrics
 from typing import Tuple
 
 from fsl.data.image import Image
+import fsl.utils.path as fslpath
 
 log = logging.getLogger(__name__)
 
@@ -145,14 +146,14 @@ def prob_threshold(pb, threshold, col=1):
 
 def report_evaluate(meldirs, model, thresholds):
 
+    basedir = fslpath.commonBase([op.abspath(d) for d in meldirs])
     columns = ['Dataset', 'Threshold', 'TPR', 'TNR', '(3*TPR+TNR)/4']
-    df      = pd.DataFrame(index=np.arange(len(meldirs) * len(thresholds)),
-                           columns=columns)
+    df      = pd.DataFrame(columns=columns)
 
     row = 0
 
     for meldir in meldirs:
-        dataset     = op.basename(meldir)
+        dataset     = op.relpath(meldir, basedir)
         nics        = Image(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC')).shape[3]
         hand_labels = read_labels(op.join(meldir, 'hand_labels_noise.txt'), nics)
 
