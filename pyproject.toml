@@ -12,6 +12,7 @@ requires-python = ">=3.8"
 authors         = [{name = "Sean Fitzgibbon", email = "sean.fitzgibbon@ndcn.ox.ac.uk"}]
 dependencies    = [
   "cachetools",
+  "file_tree",
   "fslpy >=3.15",
   "jinja2",
   "joblib",
@@ -19,10 +20,16 @@ dependencies    = [
   "nibabel",
   "numpy",
   "pandas",
-  "scikit-learn >=0.24.1",
+  "scikit-learn >=1.3",
   "seaborn",
   "scipy",
   "spectrum",
+]
+
+[project.optional-dependencies]
+extra = [
+  "xgboost",
+  "optuna"
 ]
 
 [project.scripts]
