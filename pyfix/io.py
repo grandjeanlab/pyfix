@@ -160,7 +160,7 @@ def load_motion_parameters(fname):
     return mp
 
 
-def save_model(fname, model):
+def save_model(fname, model, threshold=None):
     """Save a pyFIX model to file.
 
     Args:
@@ -186,7 +186,8 @@ def save_model(fname, model):
             "sklearn_version" : "<sklearn-version>",
             "xgboost_version" : "<xgboost-version>",
             "model_type"      : "<model-type>",
-            "model_contents"  : "<model-contents>"
+            "model_contents"  : "<model-contents>",
+            "model_threshold" : "<model-threshold>"  # optional
         }
 
     where:
@@ -198,6 +199,8 @@ def save_model(fname, model):
         relevant)
       - <model-type> is one of "xgboost" or "sklearn"
       - <model-contents> is the base64-encoded serialised model object.
+      - <model-threshold> is the optimal threshold to use, automatically
+        determined when tuning a model with optuna.
 
     At the moment we are able to save:
 
@@ -256,6 +259,8 @@ def save_model(fname, model):
         'model_type'      : model_type,
         'model_contents'  : dumped_model,
     }
+    if threshold is not None:
+        to_save['model_threshold'] = threshold
 
     if op.exists(fname):
         log.warning(f'Model file already exists - overwriting: {fname}')
@@ -279,7 +284,9 @@ def load_model(fname):
         fname: File to load
 
     Returns:
-        A model object, such as a sklearn or xgboost classifier.
+        - A model object, such as a sklearn or xgboost classifier.
+        - An optimal probability threshold to use for classification,
+          or None if an optimal threshold was not estimated.
     """
 
     sklearn_warning = (
@@ -308,7 +315,7 @@ def load_model(fname):
 
                 model = joblib.load(fname)
 
-        return model
+        return model, None
 
     # pyfix >= 0.4.0 file - format as
     # described in the save_model docs.
@@ -348,7 +355,7 @@ def load_model(fname):
                                f'version of Pyfix ({pyfix.__version__}) '
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
-        return model
+        return model, mdata.get('model_threshold', None)
 
     # Sniff the first few bytes of
     # the file to see what we have
