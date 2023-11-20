@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 
 import base64
-from tempfile import TemporaryFile
+from tempfile import TemporaryFile, TemporaryDirectory
 
 import logging
+import multiprocessing as mp
 import os
-from copy import deepcopy
-from dataclasses import dataclass
+import os.path as op
 import importlib
-from typing import List
 from typing import Union
 
-import jinja2
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed, parallel_backend
@@ -131,40 +129,39 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
     return train_data
 
 
-def create_model(model_cls=None):
+def create_model(model_class=None, **params):
     """Create the xgboost or scikit learn classifier that is used for training
     and classification. By default a XGBoostClassifier is created,
-
-    The classifier type can be specified via the "PYFIX_MODEL" environment
-    variable, e.g.
-
-        PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
-
-    Initialisation parameters can be set via "PYFIX_MODEL_<parameter>"
-    environment variables, e.g:
-
-        PYFIX_MODEL_n_estimators=100
     """
-    if model_cls is None:
-        model_cls = os.environ.get('PYFIX_MODEL', None)
 
-    if model_cls is None:
-        model_cls = 'xgboost.XGBClassifier'
 
-    if model_cls.startswith('xgboost') and (xgboost is None):
-        model_cls = 'sklearn.ensemble.RandomForestClassifier'
-        log.warning(f'xgboost is not installed - falling back to {model}')
+    if model_class is None:
+        model_class = 'xgboost.XGBClassifier'
+        pass
 
-    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
-    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
+    if model_class.startswith('xgboost') and xgboost is None:
+        model_class = 'sklearn.ensemble.RandomForestClassifier'
+        log.warning('xgboost is not installed - '
+                    f'falling back to {model_class}')
 
-    log.debug(f'Using {model_cls}')
+    log.debug(f'Using {model_class}')
 
-    mod, cls = model_cls.rsplit('.', 1)
+    mod, cls = model_class.rsplit('.', 1)
     mod      = importlib.import_module(mod)
     cls      = getattr(mod, cls)
 
-    return cls(**params)
+    model = cls(**params)
+
+    return model
+
+
+def create_pipeline(model):
+    """Creates a sklearn pipeline containing some preprocessing steps
+    which are run prior to the given classifier model.
+    """
+
+    scale = preprocessing.StandardScaler()
+    return pipeline.make_pipeline(scale, model)
 
 
 def prepare_data_for_training(table):
@@ -184,86 +181,176 @@ def prepare_data_for_training(table):
     return X, y, groups
 
 
-def train(table: pd.DataFrame,
-          model_cls=None,
-          loo=False,
-          n_jobs=None):
+def train(table: pd.DataFrame, model_class=None, loo=False, n_jobs=None):
 
     X, y, groups = prepare_data_for_training(table)
-    model        = create_model(model_cls)
+    model        = create_model(model_class, n_jobs=n_jobs)
+    pipe         = create_pipeline(model)
 
-    model.fit(X, y)
+    pipe.fit(X, y)
 
-    if loo: loo_results = _cv_loo(model, X, y, groups, n_jobs=n_jobs)[:3]
-    else:   loo_results = None
+    if loo:
+        loo = _cv_loo(model, X, y, groups, n_jobs=n_jobs)
+    else:
+        loo = None
 
-    return model, loo_results
+    return model, loo
 
 
-def tuned_train(table: pd.DataFrame, model_cls=None, n_jobs=None, n_trials=50):
+def tuned_train(table: pd.DataFrame,
+                model_class=None,
+                loo=False,
+                n_jobs=None,
+                n_trials=100):
+
+    n_trials_per_job = int(np.ceil(n_trials / n_jobs))
 
     X, y, groups = prepare_data_for_training(table)
 
     def objective(trial):
 
-        model = create_model(model_cls)
-        thres = trial.suggest_int('threshold', 0, 100)
+        # Run each model with a single thread, and
+        # parallelise across the hyperparameter search.
+        model = create_model(n_jobs=1, **_tune_get_model_hyper_parameters(
+            model_class, trial))
 
+        thres = trial.suggest_categorical('pyfix_threshold',
+                                          (1, 2, 5, 10, 20, 30, 40, 50))
         y_pred, y_pred_pb, test_idx = _cv_loo(model, X, y, groups)[:3]
         y_pred = legacy.prob_threshold(y_pred_pb, threshold=thres / 100)
 
         score = 0
 
-        for fold, idx in enumerate(test_idx):
+        for idx in test_idx:
             cm = metrics.confusion_matrix(y[idx], y_pred[idx], labels=[0, 1])
-            # score += 1 - legacy.fix_metric(cm)[2]
-            score += legacy.fix_metric(cm)[2]
+            score += 1 - legacy.fix_metric(cm)[2]
 
         return score
 
-    study = optuna.create_study(direction='maximize')
-    study.enqueue_trial({'threshold' : 20})
-    results = study.optimize(objective, n_trials=n_trials)
+    # Run (ntrials/njobs) trials in a separate process
+    def run_trials(storage):
+        study = optuna.load_study(study_name='pyfix', storage=storage)
+        study.optimize(objective, n_trials=n_trials_per_job)
+
+    with TemporaryDirectory() as td:
+
+        logfile = op.join(td, 'study.log')
+        storage = optuna.storages.JournalStorage(
+            optuna.storages.JournalFileStorage(logfile))
+        study = optuna.create_study(study_name='pyfix', storage=storage)
+        study.enqueue_trial({'pyfix_threshold' : 20})
+
+        procs = [mp.Process(target=run_trials, args=(storage,))
+                 for _ in range(n_jobs)]
+
+        for p in procs: p.start()
+        for p in procs: p.join()
+
+        study     = optuna.load_study(study_name='pyfix', storage=storage)
+        params    = dict(study.best_trial.params)
+        threshold = params.pop('pyfix_threshold')
+
+    # Re-train model using parameters from best trial
+    model = create_model(**params)
+    pipe  = create_pipeline(model)
+    pipe.fit(X, y)
+
+    if loo:
+        loo = _cv_loo(model, X, y, groups, n_jobs=n_jobs)
+    else:
+        loo = None
+
+    return model, loo, threshold
 
 
-def _cv_loo(model, X, y, groups, n_jobs=1):
-    loo = LeaveOneGroupOut()
+def _tune_get_model_hyper_parameters(model_class, trial):
+    """Used by tuned_train. Returns a dict of initialisation paramaters
+    for the classifier, generated by optuna.
+    """
 
-    pipe = pipeline.make_pipeline(preprocessing.StandardScaler(), model)
+    # XGBClassifier hyper-parameters - Copied from
+    # https://github.com/optuna/optuna-examples/blob/\
+    #   71e00a0b16103ca91b5e3380ebc158bca6582741/xgboost/xgboost_simple.py
+    if xgboost is not None:
+        params = {
+            # defines booster, gblinear for linear functions.
+            'booster': trial.suggest_categorical('booster', ['gbtree', 'gblinear', 'dart']),
+            # L2 regularization weight.
+            'lambda': trial.suggest_float('lambda', 1e-8, 1.0, log=True),
+            # L1 regularization weight.
+            'alpha': trial.suggest_float('alpha', 1e-8, 1.0, log=True),
+            # sampling ratio for training data.
+            'subsample': trial.suggest_float('subsample', 0.2, 1.0),
+            # sampling according to each tree.
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.2, 1.0),
+        }
 
-    par = Parallel(n_jobs=n_jobs)
-    blocks = par(delayed(__fit_and_predict)(clone(pipe), X, y, train_idx, test_idx)
-                 for train_idx, test_idx in loo.split(X, y, groups))
+        if params['booster'] in ['gbtree', 'dart']:
+            # maximum depth of the tree, signifies complexity of the tree.
+            params['max_depth'] = trial.suggest_int('max_depth', 3, 9, step=2)
+            # minimum child weight, larger the term more conservative the tree.
+            params['min_child_weight'] = trial.suggest_int('min_child_weight', 2, 10)
+            params['eta'] = trial.suggest_float('eta', 1e-8, 1.0, log=True)
+            # defines how selective algorithm is.
+            params['gamma'] = trial.suggest_float('gamma', 1e-8, 1.0, log=True)
+            params['grow_policy'] = trial.suggest_categorical('grow_policy', ['depthwise', 'lossguide'])
 
-    trained_models = [m for _, _, m in blocks]
+        if params['booster'] == 'dart':
+            params['sample_type'] = trial.suggest_categorical('sample_type', ['uniform', 'weighted'])
+            params['normalize_type'] = trial.suggest_categorical('normalize_type', ['tree', 'forest'])
+            params['rate_drop'] = trial.suggest_float('rate_drop', 1e-8, 1.0, log=True)
+            params['skip_drop'] = trial.suggest_float('skip_drop', 1e-8, 1.0, log=True)
 
-    y_pred = np.concatenate([y0 for y0, _, _ in blocks])
-    y_pred_pb = np.concatenate([ypb for _, ypb, _ in blocks])
+    # sklearn RandomForestClassifier params
+    else:
+        params = {
+            'n_estimators'      : [10, 50, 100, 150, 200, 250],
+            'max_features'      : ['auto', 'sqrt', 'log2'],
+            'max_depth'         : [None, 10, 20, 30, 40, 50],
+            'min_samples_split' : [2, 5, 10, 15, 20],
+            'min_samples_leaf'  : [1, 2, 5, 10, 15]
+        }
+        params = {k : triakl.suggest_categorical(k, v)
+                  for k, v in params.items()}
 
-    test_idx = [tst for _, tst in loo.split(X, y, groups)]
+    return params
+
+
+def _cv_loo(model, X, y, groups, n_jobs=None):
+
+    loo     = LeaveOneGroupOut()
+    par     = Parallel(n_jobs=n_jobs)
+    folds   = list(loo.split(X, y, groups))
+    results = par(delayed(__fit_and_predict)(clone(model), X, y, train, test)
+                  for train, test in folds)
+
+    y_pred    = np.concatenate([y0  for y0, _  in results])
+    y_pred_pb = np.concatenate([ypb for _, ypb in results])
+
+    test_idx     = [tst for _, tst in folds]
     test_idx_cat = np.concatenate(test_idx)
 
-    y_pred = y_pred[np.argsort(test_idx_cat)]
-
+    y_pred    = y_pred[   np.argsort(test_idx_cat)]
     y_pred_pb = y_pred_pb[np.argsort(test_idx_cat), :]
 
-    return y_pred, y_pred_pb, test_idx, trained_models
+    return y_pred, y_pred_pb, test_idx
 
 
 def __fit_and_predict(model, X, y, train_idx, test_idx):
     X_trn, X_tst, y_trn, y_tst = X[train_idx, :], X[test_idx, :], y[train_idx], y[test_idx]
 
+    pipe = create_pipeline(model)
+
     # fit model
+    pipe.fit(X_trn, y_trn)
 
-    model.fit(X_trn, y_trn)
+    # predict class
+    y_pred = pipe.predict(X_tst)
 
-    # predict class, and class probabilities (where possible)
-
-    y_pred = model.predict(X_tst)
-
+    # and class probabilities (where possible)
     try:
-        y_pred_pb = model.predict_proba(X_tst)
-    except:
+        y_pred_pb = pipe.predict_proba(X_tst)
+    except AttributeError:
         y_pred_pb = None
 
-    return y_pred, y_pred_pb, deepcopy(model)
+    return y_pred, y_pred_pb

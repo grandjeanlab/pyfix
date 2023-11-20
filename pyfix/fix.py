@@ -7,6 +7,7 @@ import argparse
 import importlib
 import itertools as it
 import logging
+import multiprocessing as mp
 import os
 import os.path as op
 import sys
@@ -47,7 +48,7 @@ Usage for each stage separately, including creation of training data:
   fix -f <mel.ica>
     Feature extraction (for later training and/or classifying).
 
-  fix -t <training-output-basename> [-l|-u] <mel1.ica> <mel2.ica> ...
+  fix -t <training-output-basename> [-l] [-u] <mel1.ica> <mel2.ica> ...
 
     Train classifier (Training output basename followed by list of Melodic
     directories).  Every Melodic directory must contain hand_labels_noise.txt
@@ -140,43 +141,51 @@ def run_feature_extraction(meldir):
     legacy.save_features(op.join(meldir, FIXDIR), f)
 
 
-def run_train(basename, meldir, loo, tune, model_cls):
+def run_train(args):
 
-    if tune:
-        loo = True
+    if args.tune:
         optuna = weak_import('optuna')
         if optuna is None:
             raise RuntimeError('You must install the optuna package in order '
                                'to perform hyperparameter optimisation with '
                                'the -u option')
 
-    for d in meldir:
+    for d in args.meldir:
         assert_has_features(d)
         assert_has_hand_labels(d)
 
-    file_table = legacy.generate_file_table(*meldir)
+    file_table = legacy.generate_file_table(*args.meldir)
 
     #  save file table
-    io.save_file_table(basename, file_table)
+    io.save_file_table(args.basename, file_table)
 
     # read and collate all features into a training table
     training_data = classify.collate_features(file_table, legacy_features=True)
 
-    # classify
-    if not tune:
-        clf, loo_result = classify.train(
-            training_data, model_cls=model_cls, loo=loo)
-    else:
-        clf = classify.tuned_train(
-            training_data, model_cls=model_cls)
+    # Training with optional LOO cross validation
+    if not args.tune:
+        threshold = None
+        clf, loo = classify.train(training_data,
+                                  args.model_class,
+                                  loo=args.loo,
+                                  n_jobs=args.n_jobs)
 
-    if loo:
-        report = legacy.report_loo(*loo_result)
-        with open(basename+"_LOO_results", 'w') as f:
+    # training with automatic estimation
+    # of an optimal probability threshold
+    else:
+        clf, loo, threshold = classify.tuned_train(training_data,
+                                                   args.model_class,
+                                                   loo=args.loo,
+                                                   n_trials=args.n_trials,
+                                                   n_jobs=args.n_jobs)
+
+    if loo is not None:
+        report = legacy.report_loo(*loo)
+        with open(args.basename + "_LOO_results", 'w') as f:
             f.write(report)
 
     # save model
-    io.save_model(basename, clf)
+    io.save_model(args.basename, clf, threshold)
 
 
 def run_classify(meldir, model, threshold):
@@ -189,8 +198,14 @@ def run_classify(meldir, model, threshold):
 
     features0 = legacy.read_features(op.join(fixdir, 'features.csv'))
 
-    clf = io.load_model(model)
-    ypb = classify.classify(features0, clf)[1]
+    clf, saved_threshold = io.load_model(model)
+    ypb                  = classify.classify(features0, clf)[1]
+
+    if threshold is None:
+        threshold = saved_threshold
+    if threshold is None:
+        raise RuntimeError('You must specify a probability threshold - '
+                           f'{model} does not contain an optimal threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
@@ -336,9 +351,11 @@ def main():
     main_parser = argparse.ArgumentParser(add_help=False)
     main_parser.add_argument('meldir', metavar='<mel.ica>')
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
-    main_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    main_parser.add_argument('threshold', metavar='<thresh>', type=int,
+                             nargs='?')
     main_parser.add_argument('-m', '--motion', action='store_true')
-    main_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
+    main_parser.add_argument('-h', '--highpass', metavar='<highpass>',
+                             type=float, default=-1.0)
     main_parser.add_argument('-A', '--aggressive', action='store_true')
 
     # FEATURE parser
@@ -347,17 +364,22 @@ def main():
 
     # TRAIN parser
     train_parser = argparse.ArgumentParser(add_help=False)
-    train_parser.add_argument('basename', metavar='<training-output-basename>')
+    train_parser.add_argument('basename',
+                              metavar='<training-output-basename>')
     train_parser.add_argument('-l', '--loo',  action='store_true')
     train_parser.add_argument('-u', '--tune', action='store_true')
-    train_parser.add_argument('-m', '--model_cls')
+    train_parser.add_argument('-m', '--model_class')
+    train_parser.add_argument('-n', '--n_trials', type=int)
+    train_parser.add_argument('-j', '--n_jobs', type=int,
+                              default=mp.cpu_count())
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
     classify_parser = argparse.ArgumentParser(add_help=False)
     classify_parser.add_argument('meldir', metavar='<mel.ica>')
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
-    classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
+                                 nargs='?')
 
     # EVALUATE parser
     def parse_thresholds(thresholds):
