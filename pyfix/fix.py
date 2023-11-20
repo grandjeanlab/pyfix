@@ -10,6 +10,7 @@ import logging
 import os
 import os.path as op
 import sys
+import warnings
 
 import nibabel as nb
 import numpy as np
@@ -206,11 +207,6 @@ def run_classify(meldir, model, threshold):
 
 def run_evaluate(meldir, model, thresholds):
 
-    if thresholds is not None:
-        thresholds = [int(t) for t in thresholds.split(',')]
-    else:
-        thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
-
     for md in meldir:
         assert_has_hand_labels(md)
 
@@ -304,7 +300,10 @@ def run_main(meldir, model, threshold, motion, highpass, aggressive):
 
 
 def set_log_file(basedir, mode='a'):
+
     log = logging.getLogger()
+
+    logging.captureWarnings(True)
 
     for hd in log.handlers[:]:  # remove all old handlers
         log.removeHandler(hd)
@@ -315,6 +314,17 @@ def set_log_file(basedir, mode='a'):
     hd.setFormatter(fmt)
     log.addHandler(hd)
     log.setLevel(logging.DEBUG)
+
+    xgboost = weak_import('xgboost')
+    if xgboost is not None:
+        xgboost.set_config(verbosity=0)
+
+    # optuna emits optuna.exceptions.ExperimentalWarning
+    # regarding JournalStorage
+    warnings.filterwarnings('ignore', message='JournalStorage')
+
+    # xgboost emits UserWarning regarding unused parameters
+    warnings.filterwarnings('ignore', module='xgboost')
 
     # TODO optuna seems to use its own handlers which go to stdout
     logging.getLogger('optuna').setLevel(logging.CRITICAL)
@@ -350,10 +360,15 @@ def main():
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
 
     # EVALUATE parser
+    def parse_thresholds(thresholds):
+        return [int(t) for t in thresholds.split(',')]
+
     eval_parser = argparse.ArgumentParser(add_help=False)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
-    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...')
+    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
+                             default='1,2,5,10,20,30,40,50',
+                             type=parse_thresholds)
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(add_help=False)
@@ -378,13 +393,14 @@ def main():
     elif switch == '-t':
         args = train_parser.parse_args(sys.argv[2:])
         set_log_file(os.getcwd())
-        run_train(**vars(args))
+        run_train(args)
     elif switch == '-c':
         args = classify_parser.parse_args(sys.argv[2:])
         set_log_file(args.meldir)
         run_classify(**vars(args))
     elif switch == '-C':
         args = eval_parser.parse_args(sys.argv[2:])
+        args.thresholds = [int(t) for t in args.thresholds.split(',')]
         set_log_file(os.getcwd())
         run_evaluate(**vars(args))
     elif switch == '-a':
