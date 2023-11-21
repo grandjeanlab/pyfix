@@ -422,7 +422,6 @@ def main():
         run_classify(**vars(args))
     elif switch == '-C':
         args = eval_parser.parse_args(sys.argv[2:])
-        args.thresholds = [int(t) for t in args.thresholds.split(',')]
         set_log_file(os.getcwd())
         run_evaluate(**vars(args))
     elif switch == '-a':
