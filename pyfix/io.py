@@ -15,7 +15,11 @@ import numpy   as np
 import pandas  as pd
 import            sklearn
 
-from sklearn.exceptions import InconsistentVersionWarning
+# InconsistentVersionWarning was added in sklearn 1.3.0
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+except ImportError:
+    InconsistentVersionWarning = UserWarning
 
 import pyfix
 from pyfix.util import weak_import
@@ -291,10 +295,10 @@ def load_model(fname):
 
     sklearn_warning = (
         'Pyfix model file {fname} was saved with a different version of '
-        'scikit-learn: {oldver}! You are using scikit-learn {skver}. You may '
-        'experience errors loading or using this model. If you experience '
-        'errors, the only work-around is to use the same version of '
-        'scikit-learn that was used to save the model.')
+        'scikit-learn [{oldver}]! You are using scikit-learn {skver}. You '
+        'may  experience errors loading or using this model. If you '
+        'experience errors, the only work-around is to use the same version '
+        'of scikit-learn that was used to save the model.')
 
     # pyfix < 0.4.0 - a sklearn classifier
     # stored with raw joblib.dump output.
@@ -308,7 +312,7 @@ def load_model(fname):
                 model = joblib.load(fname)
             except InconsistentVersionWarning as e:
                 skver  = sklearn.__version__
-                oldver = e.original_sklearn_version
+                oldver = getattr(e, 'original_sklearn_version', '???')
 
                 log.warning(sklearn_warning.format(
                     fname=fname, skver=skver, oldver=oldver))
