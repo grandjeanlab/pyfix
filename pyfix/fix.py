@@ -314,35 +314,37 @@ def run_main(meldir, model, threshold, motion, highpass, aggressive):
     run_apply(label_fname, motion, highpass, aggressive)
 
 
-def set_log_file(basedir, mode='a'):
+def set_log_file(basedir):
 
     log = logging.getLogger()
 
     logging.captureWarnings(True)
 
-    for hd in log.handlers[:]:  # remove all old handlers
-        log.removeHandler(hd)
-
-    hd  = logging.FileHandler(op.join(basedir, 'pyfix.log'), mode=mode)
+    hd  = logging.FileHandler(op.join(basedir, 'pyfix.log'))
     fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
                             '%(levelname)s : %(message)s')
     hd.setFormatter(fmt)
     log.addHandler(hd)
     log.setLevel(logging.DEBUG)
 
+    # make libxgboost (compiled library) quiet
     xgboost = weak_import('xgboost')
     if xgboost is not None:
         xgboost.set_config(verbosity=0)
 
-    # optuna emits optuna.exceptions.ExperimentalWarning
-    # regarding JournalStorage
-    warnings.filterwarnings('ignore', message='JournalStorage')
+    # Tell optuna to use the root logger
+    optuna = weak_import('optuna')
+    if optuna is not None:
+        optuna.logging.enable_propagation()
+        optuna.logging.disable_default_handler()
+
+        # optuna emits optuna.exceptions.ExperimentalWarning
+        # regarding JournalStorage
+        warnings.filterwarnings(
+            'ignore', category=optuna.exceptions.ExperimentalWarning)
 
     # xgboost emits UserWarning regarding unused parameters
     warnings.filterwarnings('ignore', module='xgboost')
-
-    # TODO optuna seems to use its own handlers which go to stdout
-    logging.getLogger('optuna').setLevel(logging.CRITICAL)
 
 
 def main():
