@@ -327,6 +327,7 @@ def load_model(fname):
             loaded = json.load(f)
 
         mtype  = loaded['model_type']
+        mthres = loaded.get('model_threshold', None)
         mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
         if mtype == 'xgboost':
@@ -355,7 +356,7 @@ def load_model(fname):
                                f'version of Pyfix ({pyfix.__version__}) '
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
-        return model, mdata.get('model_threshold', None)
+        return model, mthres
 
     # Sniff the first few bytes of
     # the file to see what we have
