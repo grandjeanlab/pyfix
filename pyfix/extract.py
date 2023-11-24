@@ -21,7 +21,6 @@ from pyfix import util, clean
 IC = namedtuple('IC', ['map', 'timeseries'])
 
 log = logging.getLogger(__name__)
-DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
 
 @dataclass
@@ -215,39 +214,39 @@ class FixData:
             assert v.ntime == self.ica.ntime, \
                 f'number time samples of {k} timecourse ({v.ntime}) must equal ICA ({self.ica.ntime})'
 
-        # for k, v in self.spatialmaps.items():
-        #     assert v.nspace == self.ica.nspace, \
-        #         f'number spatial samples of {k} spatialmap ({v.nspace}) must equal ICA ({self.ica.nspace})'
-
         if self.input is not None:
             assert self.input.ntime == self.ica.ntime, \
                 f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
 
     @classmethod
-    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None):
+    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None, meltree=None):
 
         # fixdir
 
         if fixdir is None:
             fixdir = op.join(meldir, 'pyfix')
+        if meltree is None:
+            meltree = util.get_resource('melodic.tree')
+
+        meltree = FileTree.read(meltree, meldir)
 
         # melodic data
 
-        func = nb.load(op.join(meldir, 'filtered_func_data.nii.gz'))
+        func = nb.load(meltree.get('filtered_func_data'))
         tr = func.header.get_zooms()[3]
 
-        func_brainmask = nb.load(op.join(meldir, 'mask.nii.gz'))
+        func_brainmask = nb.load(meltree.get('mask'))
 
-        ic_timeseries = np.loadtxt(op.join(meldir, 'filtered_func_data.ica', 'melodic_mix'))
-        ic_map = nb.load(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz'))
+        ic_timeseries = np.loadtxt(meltree.get('melodic_mix'))
+        ic_map = nb.load(meltree.get('melodic_IC'))
 
-        struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
-        struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+        struct_fast_seg = meltree.get('highres_pveseg')
+        struct_fs_wmparc = meltree.get('wmparc')
 
-        struct = nb.load(op.join(meldir, 'reg/highres.nii.gz'))
-        struct2func_xfm = op.join(meldir, 'reg/highres2example_func.mat')
+        struct = nb.load(meltree.get('highres'))
+        struct2func_xfm = meltree.get('highres2example_func_mat')
 
-        veins_exf = op.join(meldir, 'reg/veins_exf.nii.gz')
+        veins_exf = meltree.get('veins_exf')
 
         #  structural segmentations
 
@@ -283,32 +282,29 @@ class FixData:
 
         # standard-to-func transforms
 
-        standard = op.join(meldir, 'reg/standard.nii.gz')
+        standard = meltree.get('standard')
         std2func_xfm = None
 
-        std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+        std2func_mat = meltree.get('standard2example_func_mat')
         if op.exists(std2func_mat):
             std2func_xfm = std2func_mat
 
-        std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+        std2func_warp = meltree.get('standard2example_func_warp')
         if op.exists(std2func_warp):
             std2func_xfm = std2func_warp
 
         # highpass settings
-
-        if op.exists(op.join(meldir, 'design.fsf')):
-            fsf = featanalysis.loadSettings(meldir)
+        design = meltree.get('design')
+        if op.exists(design):
+            fsf = featanalysis.loadFsf(design)
             if int(fsf['temphp_yn']) == 1:
                 highpass_fwhm = float(fsf['paradigm_hp'])
 
         # motion parameters
-
         mp = None
-
-        # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
-        for fname in ('prefiltered_func_data_mcf.par', 'prefiltered_func_data_mcf_conf_hp.nii.gz'):
-            if op.exists(op.join(meldir, 'mc', fname)):
-                mp = op.join(meldir, 'mc', fname)
+        for fname in (meltree.get('motion_params'), meltree.get('motion_params_filtered')):
+            if op.exists(fname):
+                mp = fname
 
         # filter, and normalise motion confounds, as required
         if mp is not None:
@@ -412,7 +408,3 @@ def extract_features(data: FixData,
     features = pd.concat(rows, axis=1).T
 
     return features
-
-
-def _index_img(img, idx):
-    return nb.Nifti1Image(img.get_fdata()[:, :, :, idx], img.affine, img.header)

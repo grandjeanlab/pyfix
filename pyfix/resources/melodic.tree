@@ -1,0 +1,18 @@
+filtered_func_data.nii.gz                  (filtered_func_data)
+mask.nii.gz                                (mask)
+design.fsf                                 (design)
+filtered_func_data.ica                     (melodic_dir)
+  melodic_mix                              (melodic_mix)
+  melodic_IC.nii.gz                        (melodic_IC)
+reg
+  highres_pveseg.nii.gz                    (highres_pveseg)
+  wmparc.nii.gz                            (wmparc)
+  highres.nii.gz                           (highres)
+  standard.nii.gz                          (standard)
+  highres2example_func.mat                 (highres2example_func_mat)
+  standard2example_func.mat                (standard2example_func_mat)
+  standard2example_func_warp.nii.gz        (standard2example_func_warp)
+  veins_exf.nii.gz                         (veins_exf)
+mc
+  prefiltered_func_data_mcf.par            (motion_params)
+  prefiltered_func_data_mcf_conf_hp.nii.gz (motion_params_filtered)
