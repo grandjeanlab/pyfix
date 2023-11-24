@@ -155,10 +155,12 @@ def report_evaluate(meldirs, model, thresholds):
         dataset     = op.relpath(meldir, basedir)
         nics        = Image(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC')).shape[3]
         hand_labels = read_labels(op.join(meldir, 'hand_labels_noise.txt'), nics)
+        hand_labels = hand_labels == 0
 
         for threshold in thresholds:
             model_labels = generate_label_filename(meldir, model, threshold)
             model_labels = read_labels(model_labels, nics)
+            model_labels = model_labels == 0
 
             cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])
             tpr, tnr, weighted = fix_metric(cm)
