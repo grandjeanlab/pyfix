@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# from fsl.data import fixlabels
+
 import base64
 from tempfile import TemporaryFile
 
