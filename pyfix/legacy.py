@@ -9,6 +9,7 @@ from typing import Tuple
 
 from fsl.data.image import Image
 import fsl.utils.path as fslpath
+from fsl.data import fixlabels
 
 log = logging.getLogger(__name__)
 
@@ -119,16 +120,14 @@ def read_labels(filename: str, nics : int = None):
     1 for noise ICs, and 0 for signal ICs.
     """
 
-    with open(filename, 'r') as f:
-        labels = f.readlines()[-1]
-
-    noise_labels = np.fromstring(labels.strip('[]\n'), sep=',', dtype=int)
+    indices = fixlabels.loadLabelFile(filename, returnIndices=True)[2]
+    indices = np.array(indices, dtype=int)
 
     if nics is None:
-        labels = noise_labels
+        return indices
     else:
         labels = np.zeros(nics)
-        labels[noise_labels - 1] = 1
+        labels[indices - 1] = 1
 
     return labels
 
