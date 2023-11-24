@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# from fsl.data import fixlabels
+
 import base64
 from tempfile import TemporaryFile
 
@@ -232,11 +232,9 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
 
         train_data[idx]['group'] = g0
 
-        labels = legacy.read_labels(l0)
-        l1 = np.zeros(train_data[idx].shape[0])
-        l1[labels - 1] = 1
+        labels = legacy.read_labels(l0, train_data[idx].shape[0])
 
-        train_data[idx]['label'] = l1
+        train_data[idx]['label'] = labels
 
     train_data = pd.concat(train_data).astype({'label': bool})
 

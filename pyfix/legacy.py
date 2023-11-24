@@ -9,6 +9,7 @@ from typing import Tuple
 
 from fsl.data.image import Image
 import fsl.utils.path as fslpath
+from fsl.data import fixlabels
 
 log = logging.getLogger(__name__)
 
@@ -119,16 +120,14 @@ def read_labels(filename: str, nics : int = None):
     1 for noise ICs, and 0 for signal ICs.
     """
 
-    with open(filename, 'r') as f:
-        labels = f.readlines()[-1]
-
-    noise_labels = np.fromstring(labels.strip('[]\n'), sep=',', dtype=int)
+    indices = fixlabels.loadLabelFile(filename, returnIndices=True)[2]
+    indices = np.array(indices, dtype=int)
 
     if nics is None:
-        labels = noise_labels
+        return indices
     else:
         labels = np.zeros(nics)
-        labels[noise_labels - 1] = 1
+        labels[indices - 1] = 1
 
     return labels
 
@@ -156,10 +155,12 @@ def report_evaluate(meldirs, model, thresholds):
         dataset     = op.relpath(meldir, basedir)
         nics        = Image(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC')).shape[3]
         hand_labels = read_labels(op.join(meldir, 'hand_labels_noise.txt'), nics)
+        hand_labels = hand_labels == 0
 
         for threshold in thresholds:
             model_labels = generate_label_filename(meldir, model, threshold)
             model_labels = read_labels(model_labels, nics)
+            model_labels = model_labels == 0
 
             cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])
             tpr, tnr, weighted = fix_metric(cm)
