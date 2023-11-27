@@ -371,7 +371,8 @@ def main():
     train_parser.add_argument('-l', '--loo',  action='store_true')
     train_parser.add_argument('-u', '--tune', action='store_true')
     train_parser.add_argument('-m', '--model_class')
-    train_parser.add_argument('-n', '--n_trials', type=int)
+    train_parser.add_argument('-n', '--n_trials', type=int,
+                              default=100)
     train_parser.add_argument('-j', '--n_jobs', type=int,
                               default=mp.cpu_count())
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
