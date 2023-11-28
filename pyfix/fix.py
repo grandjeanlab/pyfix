@@ -88,9 +88,6 @@ Usage for each stage separately, including creation of training data:
                    default less-aggressive (unique variance) cleanup.
 '''
 
-FIXDIR = 'fix'
-
-
 def assert_is_melodic_dir(meldir):
 
     if melodicanalysis.isMelodicDir(meldir):
@@ -120,25 +117,23 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def run_feature_extraction(meldir):
+def run_feature_extraction(meldir, treefile):
 
     assert_is_melodic_dir(meldir)
 
     # instantiate FixData object
     d = extract.FixData.from_melodic_dir(
         meldir,
-        fixdir=op.join(meldir, FIXDIR)
-    )
+        treefile=treefile)
 
     # extract legacy features
     f = extract.extract_features(
         data=d,
-        features=legacy.LEGACY_FEATURE_EXTRACTORS,
-    )
+        features=legacy.LEGACY_FEATURE_EXTRACTORS)
 
     # save features (pyfix and legacy-fix formats)
-    io.save_features(op.join(meldir, FIXDIR, 'features'), f)
-    legacy.save_features(op.join(meldir, FIXDIR), f)
+    io.save_features(op.join(d.fixdir, 'features'), f)
+    legacy.save_features(d.fixdir, f)
 
 
 def run_train(args):
@@ -316,7 +311,7 @@ def run_main(meldir, model, threshold, motion, highpass, aggressive):
 
 def set_log_file(basedir):
 
-    log = logging.getLogger()
+    log = logging.getLogger('pyfix')
 
     logging.captureWarnings(True)
 
@@ -363,6 +358,7 @@ def main():
     # FEATURE parser
     feature_parser = argparse.ArgumentParser(add_help=False)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
+    feature_parser.add_argument('-t', '--treefile')
 
     # TRAIN parser
     train_parser = argparse.ArgumentParser(add_help=False)

@@ -12,6 +12,7 @@ import pandas as pd
 from cachetools import cached
 from cachetools.keys import hashkey
 from fsl.data import featanalysis
+from fsl.wrappers import fast
 from file_tree import FileTree
 from scipy import io
 
@@ -219,16 +220,16 @@ class FixData:
                 f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
 
     @classmethod
-    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None, meltree=None):
+    def from_melodic_dir(cls,
+                         meldir        : str,
+                         highpass_fwhm : float = None,
+                         meltree       : str   = None):
 
-        # fixdir
-
-        if fixdir is None:
-            fixdir = op.join(meldir, 'pyfix')
         if meltree is None:
             meltree = util.get_resource('melodic.tree')
 
         meltree = FileTree.read(meltree, meldir)
+        fixdir = meltree.get('fixdir')
 
         # melodic data
 
@@ -249,19 +250,13 @@ class FixData:
         veins_exf = meltree.get('veins_exf')
 
         #  structural segmentations
-
         if not op.exists(struct_fast_seg):
-            # TODO: move to feature with caching so it is only run JIT
             log.info('Creating structural segmentation with FSL FAST')
 
             if not op.exists(fixdir):
                 os.makedirs(fixdir)
 
-            util.run([
-                'fast', '-t', '1', '-o',
-                op.join(fixdir, 'fastsg'),
-                struct.get_filename(),
-            ])
+            fast(struct.get_filename(), op.join(fixdir, 'fastsg'), t=1)
             struct_fast_seg = op.join(fixdir, 'fastsg_pveseg.nii.gz')
 
         dseg = nb.load(struct_fast_seg)
@@ -400,7 +395,7 @@ def extract_features(data: FixData,
     # extract features
     rows = []
     for ic_idx in range(data.nic):
-        log.info(f'Extracting features for IC {ic_idx}')
+        log.debug(f'Extracting features for IC {ic_idx}')
 
         row0 = [feature.FEATURE_EXTRACTORS[fe](data, ic_idx) for fe in features]
         rows.append(pd.concat(row0, verify_integrity=True))

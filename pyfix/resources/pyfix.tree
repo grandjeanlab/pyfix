@@ -1,5 +1,4 @@
-workdir=./pyfix
-
+workdir = ./fix
 {workdir}                   (fixdir)
     func_mean.nii.gz        (func_mean)
     func_std.nii.gz         (func_std)
