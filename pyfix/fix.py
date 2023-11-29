@@ -12,9 +12,12 @@ import os
 import os.path as op
 import sys
 import warnings
+from collections import defaultdict
 
 import nibabel as nb
 import numpy as np
+
+from file_tree import FileTree
 
 from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis, melodicimage
@@ -117,14 +120,14 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def run_feature_extraction(meldir, treefile):
+def run_feature_extraction(args):
 
-    assert_is_melodic_dir(meldir)
+    assert_is_melodic_dir(args.meldir)
 
     # instantiate FixData object
     d = extract.FixData.from_melodic_dir(
-        meldir,
-        treefile=treefile)
+        args.meldir,
+        treefile=args.treefile)
 
     # extract legacy features
     f = extract.extract_features(
@@ -183,24 +186,26 @@ def run_train(args):
     io.save_model(args.basename, clf, threshold)
 
 
-def run_classify(meldir, model, threshold):
+def run_classify(args):
 
-    assert_has_features(meldir)
+    assert_has_features(args.meldir)
 
-    fixdir = op.join(meldir, 'fix')
+    fixdir = op.join(args.meldir, 'fix')
     if not op.exists(fixdir):
-        raise RuntimeError(f'Cannot find fix directory in: {meldir}')
+        raise RuntimeError(f'Cannot find fix directory in: {args.meldir}')
 
     features0 = legacy.read_features(op.join(fixdir, 'features.csv'))
 
-    clf, saved_threshold = io.load_model(model)
+    threshold            = args.threshold
+    clf, saved_threshold = io.load_model(args.model)
     ypb                  = classify.classify(features0, clf)[1]
 
     if threshold is None:
         threshold = saved_threshold
     if threshold is None:
         raise RuntimeError('You must specify a probability threshold - '
-                           f'{model} does not contain an optimal threshold.')
+                           f'{args.model} does not contain an optimal '
+                           'threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
@@ -209,54 +214,59 @@ def run_classify(meldir, model, threshold):
     y = ~y
     labels = [['Noise'] if i else ['Signal'] for i in y]
 
-    label_file = legacy.generate_label_filename(meldir, model, threshold)
-    fixlabels.saveLabelFile(labels, label_file, meldir)
+    label_file = legacy.generate_label_filename(args.meldir, args.model,
+                                                threshold)
+    fixlabels.saveLabelFile(labels, label_file, args.meldir)
 
     return label_file
 
 
-def run_evaluate(meldir, model, thresholds):
+def run_evaluate(args):
 
-    for md in meldir:
+    for md in args.meldir:
         assert_has_hand_labels(md)
 
-    for md, threshold in it.product(meldir, thresholds):
-        label_file = legacy.generate_label_filename(md, model, threshold)
+    for md, threshold in it.product(args.meldir, args.thresholds):
+        label_file = legacy.generate_label_filename(md, args.model, threshold)
         if not op.exists(label_file):
-            run_classify(md, model, threshold)
+            run_classify(md, args.model, threshold)
 
-    print(legacy.report_evaluate(meldir, model, thresholds))
+    print(legacy.report_evaluate(args.meldir, args.model, args.thresholds))
 
 
-def run_apply(labels, motion, highpass, aggressive):
+def run_apply(args):
 
-    meldir = op.dirname(labels)
-    assert_is_melodic_dir(meldir)
+    labels     = args.labels
+    highpass   = args.highpass
+    motion     = args.motion
+    aggressive = args.aggressive
+    meldir     = op.dirname(labels)
+    ftree      = FileTree.read(args.treefile, meldir)
 
-    nifti_filt = op.join(meldir, 'filtered_func_data.nii.gz')
-    nifti_clean = op.join(meldir, 'filtered_func_data_clean.nii.gz')
-    nifti_clean_varnorm = op.join(meldir, 'filtered_func_data_clean_vn.nii.gz')
+    nifti_filt              = ftree.get('filtered_func_data')
+    nifti_clean             = ftree.get('filtered_func_data_clean')
+    nifti_clean_varnorm     = ftree.get('filtered_func_data_clean_vn')
 
-    cifti = op.join(meldir, 'Atlas.dtseries.nii')
-    cifti_filt = op.join(meldir, 'Atlas_hp_preclean.dtseries.nii')
-    cifti_clean = op.join(meldir, 'Atlas_clean.dtseries.nii')
-    cifti_clean_varnorm = op.join(meldir, 'Atlas_clean_vn.dscalar.nii')
+    cifti                   = ftree.get('cifti_dtseries')
+    cifti_filt              = ftree.get('cifti_preclean')
+    cifti_clean             = ftree.get('cifti_clean')
+    cifti_clean_varnorm     = ftree.get('cifti_clean_vn')
 
-    icamix = op.join(meldir, 'filtered_func_data.ica', 'melodic_mix')
+    icamix                  = ftree.get('melodic_mix')
 
-    motion_parameters = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
-    motion_parameters_filt = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp.nii.gz')
-    motion_parameters_clean = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp_clean.nii.gz')
+    motion_parameters       = ftree.get('motion_params')
+    motion_parameters_filt  = ftree.get('motion_params_filtered')
+    motion_parameters_clean = ftree.get('motion_params_cleaned')
 
     ddremove = legacy.read_labels(labels)
 
     tr = clean.get_tr(nifti_filt)
 
     # highpass settings (get from FSF is present and highpass not provided)
+    fsf = ftree.get('design')
+    if (highpass is None) and op.exists(fsf):
+        fsf = featanalysis.loadFsf(fsf)
 
-    if (highpass is None) and featanalysis.isFEATDir(meldir):
-
-        fsf = featanalysis.loadSettings(meldir)
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
 
@@ -302,20 +312,20 @@ def run_apply(labels, motion, highpass, aggressive):
         )
 
 
-def run_main(meldir, model, threshold, motion, highpass, aggressive):
+def run_main(args):
+    run_feature_extraction(args)
+    args.labels = run_classify(args)
+    run_apply(args)
 
-    run_feature_extraction(meldir)
-    label_fname = run_classify(meldir, model, threshold)
-    run_apply(label_fname, motion, highpass, aggressive)
 
+def setup_logging(logfile):
 
-def set_log_file(basedir):
-
-    log = logging.getLogger('pyfix')
-
+    # Make warnings emitted via the warnings
+    # module get directed to the log
     logging.captureWarnings(True)
 
-    hd  = logging.FileHandler(op.join(basedir, 'pyfix.log'))
+    log = logging.getLogger('pyfix')
+    hd  = logging.FileHandler(logfile)
     fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
                             '%(levelname)s : %(message)s')
     hd.setFormatter(fmt)
@@ -344,8 +354,23 @@ def set_log_file(basedir):
 
 def main():
 
+    # options passed to all ArgumentParser objects
+    opts = {'add_help'     : False,
+            'allow_abbrev' : False}
+
+    # arguments accepted by all sub-parsers
+    shared_parser = argparse.ArgumentParser(**opts)
+    shared_parser.add_argument('-lf', '--logfile',
+                               default=op.join(os.getcwd(), 'pyfix.log'))
+    shared_parser.add_argument('-tf', '--treefile',
+                               default=util.get_resource('melodic.tree'))
+    shared_parser.add_argument('-nj', '--n_jobs', type=int,
+                               default=mp.cpu_count())
+
+    opts['parents'] = [shared_parser]
+
     # MAIN parser
-    main_parser = argparse.ArgumentParser(add_help=False)
+    main_parser = argparse.ArgumentParser(**opts)
     main_parser.add_argument('meldir', metavar='<mel.ica>')
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
     main_parser.add_argument('threshold', metavar='<thresh>', type=int,
@@ -356,12 +381,11 @@ def main():
     main_parser.add_argument('-A', '--aggressive', action='store_true')
 
     # FEATURE parser
-    feature_parser = argparse.ArgumentParser(add_help=False)
+    feature_parser = argparse.ArgumentParser(**opts)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
-    feature_parser.add_argument('-t', '--treefile')
 
     # TRAIN parser
-    train_parser = argparse.ArgumentParser(add_help=False)
+    train_parser = argparse.ArgumentParser(**opts)
     train_parser.add_argument('basename',
                               metavar='<training-output-basename>')
     train_parser.add_argument('-l', '--loo',  action='store_true')
@@ -369,12 +393,10 @@ def main():
     train_parser.add_argument('-m', '--model_class')
     train_parser.add_argument('-n', '--n_trials', type=int,
                               default=100)
-    train_parser.add_argument('-j', '--n_jobs', type=int,
-                              default=mp.cpu_count())
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
-    classify_parser = argparse.ArgumentParser(add_help=False)
+    classify_parser = argparse.ArgumentParser(**opts)
     classify_parser.add_argument('meldir', metavar='<mel.ica>')
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
@@ -384,7 +406,7 @@ def main():
     def parse_thresholds(thresholds):
         return [int(t) for t in thresholds.split(',')]
 
-    eval_parser = argparse.ArgumentParser(add_help=False)
+    eval_parser = argparse.ArgumentParser(**opts)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
     eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
@@ -392,45 +414,44 @@ def main():
                              type=parse_thresholds)
 
     # APPLY parser
-    apply_parser = argparse.ArgumentParser(add_help=False)
-    apply_parser.add_argument('labels', metavar='<mel.ica/fix4melview_TRAIN_thr.txt>')
+    apply_parser = argparse.ArgumentParser(**opts)
+    apply_parser.add_argument('labels', metavar='<labelfile>')
     apply_parser.add_argument('-m', '--motion', action='store_true')
-    apply_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
+    apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
+                              type=float, default=-1)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
-    if len(sys.argv) == 1:
+    argv = sys.argv[1:]
+
+    if len(argv) == 0:
         print(USAGE)
         sys.exit()
 
-    switch = sys.argv[1]
+    # all sub-commands except for main
+    # are selected with a switch
+    switch = argv[0]
+    if switch.startswith('-'):
+        argv = argv[1:]
 
     if switch == '-h':
         print(USAGE)
         sys.exit()
-    elif switch == '-f':
-        args = feature_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir)
-        run_feature_extraction(**vars(args))
-    elif switch == '-t':
-        args = train_parser.parse_args(sys.argv[2:])
-        set_log_file(os.getcwd())
-        run_train(args)
-    elif switch == '-c':
-        args = classify_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir)
-        run_classify(**vars(args))
-    elif switch == '-C':
-        args = eval_parser.parse_args(sys.argv[2:])
-        set_log_file(os.getcwd())
-        run_evaluate(**vars(args))
-    elif switch == '-a':
-        args = apply_parser.parse_args(sys.argv[2:])
-        set_log_file(op.dirname(args.labels))
-        run_apply(**vars(args))
-    else:
-        args = main_parser.parse_args(sys.argv[1:])
-        set_log_file(args.meldir)
-        run_main(**vars(args))
+
+    switches = defaultdict(
+        lambda: (main_parser,     run_main),
+        {'-f' : (feature_parser,  run_feature_extraction),
+         '-t' : (train_parser,    run_train),
+         '-c' : (classify_parser, run_classify),
+         '-C' : (eval_parser,     run_evaluate),
+         '-a' : (apply_parser,    run_apply)})
+
+    parser, runfunc = switches[switch]
+    args            = parser.parse_args(argv)
+
+    setup_logging(args.logfile)
+    log.info('Pyfix command: %s', ' '.join(sys.argv))
+
+    runfunc(args)
 
 
 if __name__ == '__main__':
