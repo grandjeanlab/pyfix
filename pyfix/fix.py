@@ -22,8 +22,17 @@ from file_tree import FileTree
 from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis, melodicimage
 
-from pyfix import extract, feature, legacy, io, classify, clean, __version__
-from pyfix.util import weak_import
+from pyfix import (extract,
+                   feature,
+                   legacy,
+                   io,
+                   classify,
+                   clean,
+                   __version__)
+from pyfix.util import weak_import, get_resource
+
+
+log = logging.getLogger(__name__)
 
 
 USAGE = f'''
@@ -324,7 +333,6 @@ def setup_logging(logfile):
     # module get directed to the log
     logging.captureWarnings(True)
 
-    log = logging.getLogger('pyfix')
     hd  = logging.FileHandler(logfile)
     fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
                             '%(levelname)s : %(message)s')
@@ -363,7 +371,7 @@ def main():
     shared_parser.add_argument('-lf', '--logfile',
                                default=op.join(os.getcwd(), 'pyfix.log'))
     shared_parser.add_argument('-tf', '--treefile',
-                               default=util.get_resource('melodic.tree'))
+                               default=get_resource('melodic.tree'))
     shared_parser.add_argument('-nj', '--n_jobs', type=int,
                                default=mp.cpu_count())
 

@@ -223,12 +223,12 @@ class FixData:
     def from_melodic_dir(cls,
                          meldir        : str,
                          highpass_fwhm : float = None,
-                         meltree       : str   = None):
+                         treefile      : str   = None):
 
-        if meltree is None:
-            meltree = util.get_resource('melodic.tree')
+        if treefile is None:
+            treefile = util.get_resource('melodic.tree')
 
-        meltree = FileTree.read(meltree, meldir)
+        meltree = FileTree.read(treefile, meldir)
         fixdir = meltree.get('fixdir')
 
         # melodic data
