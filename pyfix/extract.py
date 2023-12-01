@@ -1,20 +1,23 @@
 #!/usr/bin/env python
-import logging
-import os
-import os.path as op
-from collections import namedtuple
-from dataclasses import dataclass, field
-from typing import Optional, List, Type
+
+import                    logging
+import                    os
+import os.path     as     op
+from   collections import namedtuple
+from   dataclasses import dataclass, field
+from   typing      import Optional, List, Type
 
 import nibabel as nb
-import numpy as np
-import pandas as pd
-from cachetools import cached
+import numpy   as np
+import pandas  as pd
+
+from cachetools      import cached
 from cachetools.keys import hashkey
-from fsl.data import featanalysis
+
+from fsl.data     import featanalysis
 from fsl.wrappers import fast
-from file_tree import FileTree
-from scipy import io
+from file_tree    import FileTree
+
 
 import pyfix.feature as feature
 from pyfix import util, clean, io
@@ -229,6 +232,7 @@ class FixData:
         fixdir  = indir.fixdir
         intree  = indir.input_tree
         fixtree = indir.fix_tree
+        indir   = indir.indir
 
         os.makedirs(fixdir, exist_ok=True)
 
@@ -253,8 +257,10 @@ class FixData:
         #  structural segmentations
         if not op.exists(struct_fast_seg):
             log.info('Creating structural segmentation with FSL FAST')
-            fast_prefix     = fixtree.placeholders['fast_basename']
             struct_fast_seg = fixtree.get('fastsg')
+            fast_prefix     = fixtree.placeholders['fast_basename']
+            fast_prefix     = op.join(op.dirname(struct_fast_seg), fast_prefix)
+
             fast(struct.get_filename(), fast_prefix, t=1)
 
         dseg = nb.load(struct_fast_seg)
@@ -269,7 +275,8 @@ class FixData:
             dseg = nb.load(struct_fast_seg)
             dseg_d = dseg.get_fdata()
             dseg_d[subcort.get_fdata().astype(bool)] = 2
-            dseg = nb.Nifti1Image(dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
+            dseg = nb.Nifti1Image(
+                dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
             dseg.to_filename(struct_fast_seg)
 
         # standard-to-func transforms
@@ -294,13 +301,15 @@ class FixData:
 
         # motion parameters
         mp = None
-        for fname in (intree.get('motion_params'), intree.get('motion_params_filtered')):
+        for fname in (intree.get('motion_params'),
+                      intree.get('motion_params_filtered')):
             if op.exists(fname):
                 mp = fname
 
         # filter, and normalise motion confounds, as required
         if mp is not None:
-            mp = clean.motion_confounds(mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=meldir)
+            mp = clean.motion_confounds(
+                mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=indir)
             mp = clean._normalise(mp)
 
         # instantiate class

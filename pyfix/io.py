@@ -121,7 +121,7 @@ class InputDirectory:
         fixdir     = input_tree.get('fixdir')
         fix_tree   = FileTree.read(fix_tree, fixdir)
 
-        return InputDirectory(indir, fixdir, input_tree, fix_tree)
+        return InputDirectory(input_dir, fixdir, input_tree, fix_tree)
 
 
 def load_motion_parameters(fname):
