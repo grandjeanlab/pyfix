@@ -17,7 +17,7 @@ from file_tree import FileTree
 from scipy import io
 
 import pyfix.feature as feature
-from pyfix import util, clean
+from pyfix import util, clean, io
 
 IC = namedtuple('IC', ['map', 'timeseries'])
 
@@ -222,43 +222,40 @@ class FixData:
                 f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
 
     @classmethod
-    def from_melodic_dir(cls,
-                         meldir        : str,
-                         highpass_fwhm : float = None,
-                         treefile      : str   = None):
+    def from_input_dir(cls,
+                       indir         : io.InputDirectory,
+                       highpass_fwhm : float = None):
 
-        if treefile is None:
-            treefile = util.get_resource('melodic.tree')
-
-        meltree = FileTree.read(treefile, meldir)
-        fixdir = meltree.get('fixdir')
-        fixtree = FileTree.read(util.get_resource('pyfix.tree'), workdir=fixdir)
+        fixdir  = indir.fixdir
+        intree  = indir.input_tree
+        fixtree = indir.fix_tree
 
         os.makedirs(fixdir, exist_ok=True)
 
         # melodic data
 
-        func = nb.load(meltree.get('filtered_func_data'))
+        func = nb.load(intree.get('filtered_func_data'))
         tr = func.header.get_zooms()[3]
 
-        func_brainmask = nb.load(meltree.get('mask'))
+        func_brainmask = nb.load(intree.get('mask'))
 
-        ic_timeseries = np.loadtxt(meltree.get('melodic_mix'))
-        ic_map = nb.load(meltree.get('melodic_IC'))
+        ic_timeseries = np.loadtxt(intree.get('melodic_mix'))
+        ic_map = nb.load(intree.get('melodic_IC'))
 
-        struct_fast_seg = meltree.get('highres_pveseg')
-        struct_fs_wmparc = meltree.get('wmparc')
+        struct_fast_seg = intree.get('highres_pveseg')
+        struct_fs_wmparc = intree.get('wmparc')
 
-        struct = nb.load(meltree.get('highres'))
-        struct2func_xfm = meltree.get('highres2example_func_mat')
+        struct = nb.load(intree.get('highres'))
+        struct2func_xfm = intree.get('highres2example_func_mat')
 
-        veins_exf = meltree.get('veins_exf')
+        veins_exf = intree.get('veins_exf')
 
         #  structural segmentations
         if not op.exists(struct_fast_seg):
             log.info('Creating structural segmentation with FSL FAST')
+            fast_prefix     = fixtree.placeholders['fast_basename']
             struct_fast_seg = fixtree.get('fastsg')
-            fast(struct.get_filename(), struct_fast_seg, t=1)
+            fast(struct.get_filename(), fast_prefix, t=1)
 
         dseg = nb.load(struct_fast_seg)
 
@@ -277,19 +274,19 @@ class FixData:
 
         # standard-to-func transforms
 
-        standard = meltree.get('standard')
+        standard = intree.get('standard')
         std2func_xfm = None
 
-        std2func_mat = meltree.get('standard2example_func_mat')
+        std2func_mat = intree.get('standard2example_func_mat')
         if op.exists(std2func_mat):
             std2func_xfm = std2func_mat
 
-        std2func_warp = meltree.get('standard2example_func_warp')
+        std2func_warp = intree.get('standard2example_func_warp')
         if op.exists(std2func_warp):
             std2func_xfm = std2func_warp
 
         # highpass settings
-        design = meltree.get('design')
+        design = intree.get('design')
         if op.exists(design):
             fsf = featanalysis.loadFsf(design)
             if int(fsf['temphp_yn']) == 1:
@@ -297,7 +294,7 @@ class FixData:
 
         # motion parameters
         mp = None
-        for fname in (meltree.get('motion_params'), meltree.get('motion_params_filtered')):
+        for fname in (intree.get('motion_params'), intree.get('motion_params_filtered')):
             if op.exists(fname):
                 mp = fname
 
@@ -321,7 +318,7 @@ class FixData:
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
-            input_tree=meltree,
+            input_tree=intree,
             fix_tree=fixtree
         )
 

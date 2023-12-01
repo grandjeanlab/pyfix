@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import annotations
+
 import            base64
 import            io
 import            json
@@ -8,6 +10,9 @@ import os.path as op
 import            os
 import            tempfile
 import            warnings
+
+from dataclasses import dataclass
+from typing      import Tuple
 
 import            joblib
 import nibabel as nb
@@ -20,6 +25,8 @@ try:
     from sklearn.exceptions import InconsistentVersionWarning
 except ImportError:
     InconsistentVersionWarning = UserWarning
+
+from file_tree import FileTree
 
 import pyfix
 from pyfix.util import weak_import
@@ -88,6 +95,33 @@ def generate_file_table(*args,
     )
 
     return d
+
+
+@dataclass(frozen=True)
+class InputDirectory:
+    """Data structure which represents a FIX input directory. """
+
+    indir      : str
+    fixdir     : str
+    input_tree : FileTree
+    fix_tree   : FileTree
+
+    @staticmethod
+    def from_input_dir(
+            input_dir  : str,
+            input_tree : str = None,
+            fix_tree   : str = None,
+    ) -> InputDirectory:
+        if input_tree is None:
+            input_tree = util.get_resource('melodic.tree')
+        if fix_tree is None:
+            fix_tree = util.get_resource('pyfix.tree')
+
+        input_tree = FileTree.read(input_tree, input_dir)
+        fixdir     = input_tree.get('fixdir')
+        fix_tree   = FileTree.read(fix_tree, fixdir)
+
+        return InputDirectory(indir, fixdir, input_tree, fix_tree)
 
 
 def load_motion_parameters(fname):

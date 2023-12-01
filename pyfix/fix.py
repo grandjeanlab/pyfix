@@ -14,6 +14,8 @@ import sys
 import warnings
 from collections import defaultdict
 
+from typing import List
+
 import nibabel as nb
 import numpy as np
 
@@ -79,10 +81,13 @@ Usage for each stage separately, including creation of training data:
     classifictions.  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
-  fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
+  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A]
 
     Apply cleanup, using artefacts listed in the .txt file, to the data inside
     the enclosing Feat/Melodic directory.
+
+    If <mel.ica> is not provided, it is assumed that <labels.txt> is contained
+    within <mel.ica>.
 
     -h -1          apply no highpass filtering.
     -h 0           apply linear detrending only.
@@ -129,14 +134,16 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def run_feature_extraction(args):
+def run_feature_extraction(meldir     : str,
+                           input_tree : str = None,
+                           fix_tree   : str = None,
+                           **kwargs):
 
-    assert_is_melodic_dir(args.meldir)
+    assert_is_melodic_dir(meldir)
 
     # instantiate FixData object
-    d = extract.FixData.from_melodic_dir(
-        args.meldir,
-        treefile=args.treefile)
+    indir = io.InputDirectory.from_input_dir(meldir, input_tree, fix_tree)
+    d     = extract.FixData.from_input_dir(indir)
 
     # extract legacy features
     f = extract.extract_features(
@@ -144,69 +151,88 @@ def run_feature_extraction(args):
         features=legacy.LEGACY_FEATURE_EXTRACTORS)
 
     # save features (pyfix and legacy-fix formats)
-    io.save_features(op.join(d.fixdir, 'features'), f)
-    legacy.save_features(d.fixdir, f)
+    f.to_csv(d.fix_tree.get('pyfix_features'), index=None)
+    legacy.save_features(d.fix_tree.get('legacy_features'), f)
 
 
-def run_train(args):
+def run_train(meldir      : List[str],
+              basename    : str,
+              model_class : str  = None,
+              loo         : bool = False,
+              tune        : bool = False,
+              n_jobs      : int  = None,
+              n_trials    : int  = None,
+              input_tree  : str  = None,
+              fix_tree    : str  = None,
+              **kwargs):
 
-    if args.tune:
+    if tune:
         optuna = weak_import('optuna')
         if optuna is None:
             raise RuntimeError('You must install the optuna package in order '
                                'to perform hyperparameter optimisation with '
                                'the -u option')
 
-    for d in args.meldir:
+    for d in meldir:
         assert_has_features(d)
         assert_has_hand_labels(d)
 
-    file_table = legacy.generate_file_table(*args.meldir)
+    file_table = legacy.generate_file_table(*meldir)
 
     #  save file table
-    io.save_file_table(args.basename, file_table)
+    io.save_file_table(basename, file_table)
 
     # read and collate all features into a training table
     training_data = classify.collate_features(file_table, legacy_features=True)
 
     # Training with optional LOO cross validation
-    if not args.tune:
+    if not tune:
         threshold = None
         clf, loo = classify.train(training_data,
-                                  args.model_class,
-                                  loo=args.loo,
-                                  n_jobs=args.n_jobs)
+                                  model_class,
+                                  loo=loo,
+                                  n_jobs=n_jobs)
 
     # training with automatic estimation
     # of an optimal probability threshold
     else:
         clf, loo, threshold = classify.tuned_train(training_data,
-                                                   args.model_class,
-                                                   loo=args.loo,
-                                                   n_trials=args.n_trials,
-                                                   n_jobs=args.n_jobs)
+                                                   model_class,
+                                                   loo=loo,
+                                                   n_trials=n_trials,
+                                                   n_jobs=n_jobs)
 
     if loo is not None:
         report = legacy.report_loo(*loo)
-        with open(args.basename + "_LOO_results", 'w') as f:
+        with open(basename + "_LOO_results", 'w') as f:
             f.write(report)
 
     # save model
-    io.save_model(args.basename, clf, threshold)
+    io.save_model(basename, clf, threshold)
 
 
-def run_classify(args):
+def run_classify(meldir     : str,
+                 model      : str,
+                 threshold  : int = None,
+                 input_tree : str = None,
+                 fix_tree   : str = None,
+                  **kwargs):
 
-    assert_has_features(args.meldir)
+    assert_has_features(meldir)
 
-    fixdir = op.join(args.meldir, 'fix')
+    indir   = io.InputDirectory.from_input_dir(meldir,
+                                               input_tree,
+                                               fix_tree)
+    fixdir  = indir.fixdir
+    intree  = indir.input_tree
+    fixtree = indir.fix_tree
+
     if not op.exists(fixdir):
-        raise RuntimeError(f'Cannot find fix directory in: {args.meldir}')
+        raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    features0 = legacy.read_features(op.join(fixdir, 'features.csv'))
+    features0 = legacy.read_features(fixtree.get('legacy_features'))
 
-    threshold            = args.threshold
-    clf, saved_threshold = io.load_model(args.model)
+    clf, saved_threshold = io.load_model(model)
     ypb                  = classify.classify(features0, clf)[1]
 
     if threshold is None:
@@ -218,39 +244,55 @@ def run_classify(args):
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
-    # TODO: move legacy label saving to legacy module
-    # invert y so that signal==False and noise==True (as per legacy fix4melview files)
-    y = ~y
-    labels = [['Noise'] if i else ['Signal'] for i in y]
-
-    label_file = legacy.generate_label_filename(args.meldir, args.model,
-                                                threshold)
-    fixlabels.saveLabelFile(labels, label_file, args.meldir)
+    # Save generated labels to FIX label file.
+    # Invert y so that signal==False and noise==True
+    # (as per legacy fix4melview files)
+    y          = ~y
+    labels     = [['Noise'] if i else ['Signal'] for i in y]
+    modelname  = op.splitext(op.basename(modelfile))[0]
+    label_file = fixtree \
+                   .update(threshold=threshold, model=modelname) \
+                   .get('fix_labels')
+    fixlabels.saveLabelFile(labels, label_file, meldir)
 
     return label_file
 
 
-def run_evaluate(args):
+def run_evaluate(meldir     : List[str],
+                 thresholds : List[int],
+                 model      : str,
+                 **kwargs):
 
-    for md in args.meldir:
-        assert_has_hand_labels(md)
+    modelname = op.splitext(op.basename(model))[0]
 
-    for md, threshold in it.product(args.meldir, args.thresholds):
-        label_file = legacy.generate_label_filename(md, args.model, threshold)
-        if not op.exists(label_file):
-            run_classify(md, args.model, threshold)
+    for md in meldir:
+        indir = io.InputDirectory.from_melodic_dir(md)
 
-    print(legacy.report_evaluate(args.meldir, args.model, args.thresholds))
+        for threshold in thresholds:
+
+            label_file = indir.fixtree \
+                .update(threshold=threshold, model=modelname) \
+                .get('fix_labels')
+            if not op.exists(label_file):
+                run_classify(md, model, threshold)
+
+    print(legacy.report_evaluate(meldir, model, thresholds))
 
 
-def run_apply(args):
+def run_apply(labels     : str,
+              meldir     : str   = None,
+              highpass   : float = None,
+              motion     : bool  = False,
+              aggressive : bool  = True,
+              input_tree : str   = None,
+              fix_tree   : str   = None,
+              **kwargs):
 
-    labels     = args.labels
-    highpass   = args.highpass
-    motion     = args.motion
-    aggressive = args.aggressive
-    meldir     = op.dirname(labels)
-    ftree      = FileTree.read(args.treefile, meldir)
+    if meldir is None:
+        meldir = op.dirname(labels)
+
+    indir = io.InputDirectory.from_input_dir(meldir, input_tree, fix_tree)
+    ftree = indir.input_tree
 
     nifti_filt              = ftree.get('filtered_func_data')
     nifti_clean             = ftree.get('filtered_func_data_clean')
@@ -281,9 +323,12 @@ def run_apply(args):
 
     # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
     # create if they don't
-    if (not op.exists(motion_parameters_filt)) and op.exists(motion_parameters):
-        mp0 = clean.motion_confounds(motion_parameters, tr=tr, temporal_fwhm=highpass, tmpdir=meldir)
-        clean.create_dummy_nifti(mp0.astype(np.float32), tr=tr, fname=motion_parameters_filt)
+    if (not op.exists(motion_parameters_filt)) and \
+       op.exists(motion_parameters):
+        mp0 = clean.motion_confounds(
+            motion_parameters, tr=tr, temporal_fwhm=highpass, tmpdir=meldir)
+        clean.create_dummy_nifti(
+            mp0.astype(np.float32), tr=tr, fname=motion_parameters_filt)
 
     # clean filtered_func_data.nii.gz
     clean.apply(
@@ -305,7 +350,8 @@ def run_apply(args):
         dd = nb.load(cifti)
         d0_tr = clean.get_tr(dd)
         d0, mask0 = clean.get_fdata(dd)
-        d0 = clean.highpass_filter(d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
+        d0 = clean.highpass_filter(
+            d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
         clean.save_image(dd, d0, mask0, fname=cifti_filt)
 
         clean.apply(
@@ -321,10 +367,10 @@ def run_apply(args):
         )
 
 
-def run_main(args):
-    run_feature_extraction(args)
-    args.labels = run_classify(args)
-    run_apply(args)
+def run_main(**kwargs):
+    run_feature_extraction(**kwargs)
+    args.labels = run_classify(**kwargs)
+    run_apply(**kwargs)
 
 
 def setup_logging(logfile):
@@ -370,8 +416,10 @@ def main():
     shared_parser = argparse.ArgumentParser(**opts)
     shared_parser.add_argument('-lf', '--logfile',
                                default=op.join(os.getcwd(), 'pyfix.log'))
-    shared_parser.add_argument('-tf', '--treefile',
+    shared_parser.add_argument('-it', '--input_tree',
                                default=get_resource('melodic.tree'))
+    shared_parser.add_argument('-ft', '--fix_tree',
+                               default=get_resource('pyfix.tree'))
     shared_parser.add_argument('-nj', '--n_jobs', type=int,
                                default=mp.cpu_count())
 
@@ -424,6 +472,7 @@ def main():
     # APPLY parser
     apply_parser = argparse.ArgumentParser(**opts)
     apply_parser.add_argument('labels', metavar='<labelfile>')
+    apply_parser.add_argument('meldir', metavar='<mel.ica>', nargs='?')
     apply_parser.add_argument('-m', '--motion', action='store_true')
     apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
                               type=float, default=-1)
@@ -459,7 +508,7 @@ def main():
     setup_logging(args.logfile)
     log.info('Pyfix command: %s', ' '.join(sys.argv))
 
-    runfunc(args)
+    runfunc(**vars(args))
 
 
 if __name__ == '__main__':

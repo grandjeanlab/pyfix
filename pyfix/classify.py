@@ -104,7 +104,7 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
         if legacy_features:
             train_data[idx] = legacy.read_features(f0)
         else:
-            train_data[idx] = io.read_features(f0)
+            train_data[idx] = pd.read_csv(f0)
 
         train_data[idx]['group'] = g0
 
