@@ -335,51 +335,6 @@ class FixData:
 
         return d
 
-    @classmethod
-    def from_osl(cls, fname, fixdir=None):
-
-        ica = io.loadmat(fname)['ica']
-
-        # IC time courses [time x numICs]
-        ic_timeseries = ica[0, 0]['tc']
-
-        # IC spatial maps [sensors x numICs]
-        ic_map = ica[0, 0]['sm']
-
-        # sampling rate
-        srate = ica[0, 0]['fsample'][0][0]
-
-        # EOG, EMG, ECG
-        eog = ica[0, 0]['EOG'].T
-        emg = ica[0, 0]['EMG'].T
-        ecg = ica[0, 0]['ECG'].T
-
-        # component labels
-        labels = ica[0, 0]['bad_components']
-        labels = np.array(labels)
-
-        # fixdir
-
-        if fixdir is None:
-            fixdir = op.join(op.splitext(fname)[0], 'pyfix')
-
-        # instantiate class
-
-        d = cls(
-            fixdir=fixdir,
-            ica=ICA(
-                maps=SpatialMap(ic_map),
-                timecourses=TimeCourse(ic_timeseries, fs=srate),
-            ),
-            timecourses={
-                'eog': TimeCourse(eog, fs=srate),
-                'ecg': TimeCourse(ecg, fs=srate),
-                'emg': TimeCourse(emg, fs=srate),
-            },
-        )
-
-        return d, labels
-
 
 def extract_features(data: FixData,
                      features: List[str]):
