@@ -14,13 +14,15 @@ import scipy
 from cachetools import cached
 from cachetools.keys import hashkey
 from fsl.wrappers import (fslmaths,
+                          fslstats,
                           flirt,
                           applywarp,
                           applyxfm,
                           concatxfm,
                           invxfm,
                           convertwarp,
-                          cluster)
+                          cluster,
+                          smoothest)
 from sklearn import linear_model
 from spectrum import aryule
 
@@ -44,6 +46,9 @@ def feature_extractor(func):
     name = func.__name__
 
     def wrapper(*args, **kwargs):
+
+        log.debug('Running feature extractor %s', name)
+
         output = func(*args, **kwargs)
 
         if np.isscalar(output):
@@ -59,7 +64,7 @@ def feature_extractor(func):
 
         return output
 
-    log.debug('Registering function: {name}', name)
+    log.debug('Registering function: %s', name)
     FEATURE_EXTRACTORS[name] = wrapper
 
     return wrapper
@@ -429,7 +434,8 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
 
 @cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', ic_idx))
 def _get_abs_ic_filename(data, ic_idx):
-    fname = op.join(data.fixdir, f'icmap{ic_idx}_abs.nii.gz')
+
+    fname = data.fix_tree.update(ic_idx=ic_idx).get('icmap_abs')
 
     # print(f'save _get_abs_image_filename: {fname}')
     icmap = data.ica.get_spatialmap(ic_idx)
@@ -444,7 +450,8 @@ def _get_abs_ic_filename(data, ic_idx):
 
 @cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', id(data), ic_idx))
 def _get_ic_filename(data, ic_idx):
-    filename = op.join(data.fixdir, f'icmap{ic_idx}.nii.gz')
+
+    filename = data.fix_tree.update(ic_idx=ic_idx).get('icmap')
 
     # print(f'save _get_image_filename: {filename}')
     data.ica.get_spatialmap(ic_idx).to_filename(filename)
@@ -454,7 +461,8 @@ def _get_ic_filename(data, ic_idx):
 
 @cached(cache={}, key=lambda d: hashkey('_get_data_tmean_filename', id(d)))
 def _get_data_tmean_filename(d):
-    filename = op.join(d.fixdir, f'input_data_tmean.nii.gz')
+
+    filename = d.fix_tree.get('tmean')
 
     d0 = d.input.data
 
@@ -469,19 +477,14 @@ def _get_data_tmean_filename(d):
 
 @feature_extractor
 def negativevspositive(data, ic_idx, ic_threshold=2.5):
-    icmap = _get_ic_filename(data, ic_idx)
+
+    icmap     = _get_ic_filename(    data, ic_idx)
     icmap_abs = _get_abs_ic_filename(data, ic_idx)
 
-    out = []
+    ent,  a, aS = fslstats(icmap)    .E.M.S.run()
+    aent, b, bS = fslstats(icmap_abs).E.M.S.run()
 
-    out += [float(util.run(['fslstats', icmap, '-E']))]
-    out += [float(util.run(['fslstats', icmap_abs, '-E']))]
-
-    a = float(util.run(['fslstats', icmap, '-M']))
-    aS = float(util.run(['fslstats', icmap, '-S']))
-
-    b = float(util.run(['fslstats', icmap_abs, '-M']))
-    bS = float(util.run(['fslstats', icmap_abs, '-S']))
+    out = [ent, aent]
 
     eps = np.finfo(float).eps
 
@@ -507,15 +510,15 @@ def zstattofuncratio(data, ic_idx):
 
     icmap = _get_ic_filename(data, ic_idx)
     func_mean = _get_data_tmean_filename(data)
-    workdir = data.fixdir
 
-    img_ratio = op.join(workdir, 'dummyd')
-    util.run(['fslmaths', icmap, '-s', '5', '-abs', '-div', func_mean, img_ratio])
-    img_ratio = nb.load(img_ratio + '.nii.gz').get_fdata()
+    img_ratio = data.fix_tree.get('img_ratio')
+    img_mult  = data.fix_tree.get('img_mult')
 
-    img_mult = op.join(workdir, 'dummym')
-    util.run(['fslmaths', icmap, '-s', '5', '-abs', '-mul', func_mean, img_mult])
-    img_mult = nb.load(img_mult + '.nii.gz').get_fdata()
+    fslmaths(icmap).smooth(5).abs().div(func_mean).run(img_ratio)
+    fslmaths(icmap).smooth(5).abs().mul(func_mean).run(img_mult)
+
+    img_ratio = nb.load(img_ratio).get_fdata()
+    img_mult  = nb.load(img_mult) .get_fdata()
 
     a = np.logical_not(np.isnan(img_mult)) & np.logical_not(np.isinf(img_mult))
     dmp = img_mult[(img_mult > 0) & a]
@@ -640,32 +643,23 @@ def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
 
 @cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', id(data)))
 def _get_dseg_filename(data):
-    dseg = op.join(data.fixdir, f'dseg.nii.gz')
-
-    # print(f'save _get_dseg_filename: {dseg}')
+    dseg = data.fix_tree.get('dseg')
     data.spatialmaps['dseg'].data.to_filename(dseg)
-
     return dseg
 
 
 @cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', id(data)))
 def _get_brainmask_filename(data):
-    d = op.join(data.fixdir, f'brainmask.nii.gz')
-
-    # print(f'save _get_brainmask_filename: {d}')
+    d = data.fix_tree.get('brainmask')
     data.spatialmaps['brainmask'].data.to_filename(d)
-
     return d
 
 
 @cached(cache={}, key=lambda data, map_key: hashkey(map_key, id(data)))
 def _get_map_with_tempname(data, map_key):
-    fname = op.join(data.fixdir, f'{map_key}.nii.gz')
-
-    # print(f'_get_map_filename: {map_key} {fname}')
+    fname = data.fix_tree.get(map_key)
     d = data.spatialmaps[map_key].data
     d.to_filename(fname)
-
     return fname
 
 
@@ -692,8 +686,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
         ref=func_mean,
         xfm=struct2func_xfm,
         interp='nearestneighbour',
-        out_name=f'{fixdir}/dseg-to-input.nii.gz'
-    )
+        out_name=data.fix_tree.get('dseg_to_input'))
 
     func = data.input.data  # nifti
     ts_csf, ts_gm, ts_wm = _extract_tissue_timeseries(func, seg)
@@ -742,13 +735,9 @@ def smoothest(data, ic_idx):
 
     icmap = _get_ic_filename(data, ic_idx)
     func_brain_mask = _get_brainmask_filename(data)
+    smth = smoothest(zstat=icmap, mask=func_brain_mask)
 
-    smth = util.run(['smoothest', '-z', icmap, '-m', func_brain_mask])
-    smth = smth.split('\n')
-    for l in smth:
-        if l.startswith('RESELS'):
-            out = float(l.split(' ')[1])
-    return [out]
+    return smth['RESELS']
 
 
 @feature_extractor
@@ -767,7 +756,7 @@ def spatialoverlap(data, ic_idx):
         ref=func_mean,
         xfm=struct2func_xfm,
         interp='nearestneighbour',
-        out_name=f'{fixdir}/dseg-to-input.nii.gz'
+        out_name=data.fix_tree.get('dseg_to_input')
     )
 
     icmap_abs = np.abs(data.ica.get_spatialmap(ic_idx).get_fdata())
@@ -787,23 +776,23 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
     # % test for "clusterness" / "compactness" - e.g. feed through TFCE and
     # % take the max (maybe pre-TFCE normalise e.g. by max(abs(z)))
 
-    icmap = _get_ic_filename(data, ic_idx)
+    out    = []
+    icmap  = _get_ic_filename(data, ic_idx)
+    std    = fslstats(icmap).S.run()
+    icmap2 = data.fix_tree.get('maxtfce')
 
-    std = util.run(['fslstats', icmap, '-S'])
+    fslmaths(icmap).abs().div(std).tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()[0]]
 
-    out = []
+    fslmaths(icmap).abs().tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()]
 
-    icmap2 = op.join(op.dirname(icmap), 'dummy2')
-    util.run(['fslmaths', icmap, '-abs', '-div', std, '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
-
-    util.run(['fslmaths', icmap, '-abs', '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
-
-    util.run(['fslmaths', icmap, '-abs', '-thr', str(ic_threshold), '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
+    fslmaths(icmap).abs().thr(ic_threshold).tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()]
 
     return out
+
+
 
 
 @lru_cache(maxsize=None)
