@@ -195,12 +195,14 @@ class ICA:
 @dataclass(frozen=True)
 class FixData:
     """Container for FIX input data."""
-    fixdir: str
-    ica: ICA
-    input: Optional[Type[TimeCourse]] = None
-    timecourses: Optional[dict] = field(default_factory=dict)
-    spatialmaps: Optional[dict] = field(default_factory=dict)
-    hp_fwhm: Optional[float] = None
+    fixdir      : str
+    ica         : ICA
+    input       : Type[TimeCourse] = None
+    timecourses : dict             = field(default_factory=dict)
+    spatialmaps : dict             = field(default_factory=dict)
+    hp_fwhm     : float            = None
+    input_tree  : FileTree         = None
+    fix_tree    : FileTree         = None
 
     @property
     def nic(self) -> int:
@@ -230,6 +232,9 @@ class FixData:
 
         meltree = FileTree.read(treefile, meldir)
         fixdir = meltree.get('fixdir')
+        fixtree = FileTree.read(util.get_resource('pyfix.tree'), workdir=fixdir)
+
+        os.makedirs(fixdir, exist_ok=True)
 
         # melodic data
 
@@ -252,12 +257,8 @@ class FixData:
         #  structural segmentations
         if not op.exists(struct_fast_seg):
             log.info('Creating structural segmentation with FSL FAST')
-
-            if not op.exists(fixdir):
-                os.makedirs(fixdir)
-
-            fast(struct.get_filename(), op.join(fixdir, 'fastsg'), t=1)
-            struct_fast_seg = op.join(fixdir, 'fastsg_pveseg.nii.gz')
+            struct_fast_seg = fixtree.get('fastsg')
+            fast(struct.get_filename(), struct_fast_seg, t=1)
 
         dseg = nb.load(struct_fast_seg)
 
@@ -266,8 +267,7 @@ class FixData:
             subcort = util.create_mask(
                 dseg=struct_fs_wmparc,
                 labels=(10, 11, 12, 13, 49, 50, 51, 52, 26, 58),
-                outname=op.join(fixdir, 'subcort.nii.gz')
-            )
+                outname=fixtree.get('subcort'))
 
             dseg = nb.load(struct_fast_seg)
             dseg_d = dseg.get_fdata()
@@ -307,7 +307,6 @@ class FixData:
             mp = clean._normalise(mp)
 
         # instantiate class
-
         d = cls(
             fixdir=fixdir,
             ica=ICA(
@@ -322,6 +321,8 @@ class FixData:
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
+            input_tree=meltree,
+            fix_tree=fixtree
         )
 
         if op.exists(standard):

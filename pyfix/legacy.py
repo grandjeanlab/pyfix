@@ -57,32 +57,16 @@ def read_features(path: str):
 
     """
 
-    filename = path
-
-    if not filename.endswith('features.csv'):
-        filename = filename + 'features.csv'
-
-    # filename = op.join(path, 'features.csv')
-
     return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
 
 
-def save_features(path, features):
+def save_features(path : str, features : pd.DataFrame):
     """
     Save legacy FIX features to file.
     """
 
-    filename = op.join(path, 'features.csv')
-
-    if op.exists(filename):
-        log.warning(f'Features file already exists: {filename}')
-
-    workdir = op.expanduser(op.dirname(filename))
-    if not op.exists(workdir):
-        os.makedirs(workdir)
-
-    log.info(f'Saving legacy fix features to: {filename}')
-    features[LEGACY_FEATURE_LABELS].to_csv(filename, index=None, header=None)
+    features[LEGACY_FEATURE_LABELS].to_csv(
+        path, index=None, header=None)
 
 
 def generate_file_table(*args):

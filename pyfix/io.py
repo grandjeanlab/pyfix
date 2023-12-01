@@ -90,43 +90,6 @@ def generate_file_table(*args,
     return d
 
 
-def read_features(filename: str):
-    """Read FIX features from file.
-
-    Args:
-        filename (str):
-
-    Returns:
-        features table (pd.DataFrame):
-
-    """
-    if not filename.endswith('.pyfix_features'):
-        filename = filename + '.pyfix_features'
-
-    return pd.read_csv(filename)
-
-
-def save_features(filename, features):
-    """
-    Save pyFIX features to a file
-    """
-
-    if not filename.endswith('.pyfix_features'):
-        filename = filename + '.pyfix_features'
-
-    if op.exists(filename):
-        log.warning(f'Features file already exists: {filename}')
-
-    workdir = op.expanduser(op.dirname(filename))
-    workdir = './' if workdir == '' else workdir
-
-    if not op.exists(workdir):
-        os.makedirs(workdir)
-
-    log.info(f'Saving pyFIX features to: {filename}')
-    features.to_csv(filename, index=None)
-
-
 def load_motion_parameters(fname):
     """Load motion parameters from one of:
       - MCFLIRT output files
