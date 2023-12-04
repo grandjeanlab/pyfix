@@ -19,6 +19,7 @@ from fsl.wrappers import (fslmaths,
                           applywarp,
                           applyxfm,
                           concatxfm,
+                          get_standard,
                           invxfm,
                           convertwarp,
                           cluster,
@@ -606,7 +607,6 @@ def everynthvariance(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@lru_cache()
 def _extract_tissue_timeseries(func, dseg):
     ts_csf = np.mean(func.get_fdata()[dseg.get_fdata() == 1], axis=0)
     ts_gm = np.mean(func.get_fdata()[dseg.get_fdata() == 2], axis=0)
@@ -794,25 +794,34 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
 
 
 
+def _create_edge_masks(data, func_brain_mask):
 
-@lru_cache(maxsize=None)
-def _create_edge_masks(func_brain_mask, workdir):
     # create edge masks if not already created
     # load edge masks
+    @lru_cache(maxsize=None)
+    def create_edge_masks(func_brain_mask):
 
-    log.info('Creating edge masks')
+        log.info('Creating edge masks')
 
-    # create edge masks in native functional space
-    # from the func brain mask
-    mask = func_brain_mask
-    ero_mask = [mask] + [op.join(workdir, f'maske{i + 1}') for i in range(5)]
-    edge_mask = [op.join(workdir, f'edge{i + 1}') for i in range(5)]
+        # create edge masks in native functional space
+        # from the func brain mask
+        mask       = func_brain_mask
+        ero_masks  = [mask]
+        edge_masks = []
 
-    for i in range(5):
-        util.run(['fslmaths', ero_mask[i], '-eroF', ero_mask[i + 1]])
-        util.run(['fslmaths', mask, '-sub', ero_mask[i + 1], edge_mask[i]])
+        for i in range(5):
+            tree = data.fix_tree.update(ero=i + 1)
+            ero_masks .append(tree.get(f'maske{i + 1}'))
+            edge_masks.append(tree.get(f'edge{i + 1}'))
 
-    return [nb.load(f'{m}.nii.gz') for m in edge_mask]
+
+        for i in range(5):
+            fslmaths(ero_masks[i]).eroF().run(ero_masks[i + 1])
+            fslmaths(mask).sub(ero_masks[i + 1]).run(edge_masks[i])
+
+        return [nb.load(m) for m in edge_masks]
+
+    return create_edge_masks(func_brain_mask)
 
 
 @feature_extractor
@@ -824,9 +833,8 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
 
     icmap = data.ica.get_spatialmap(ic_idx)
     func_brainmask = _get_brainmask_filename(data)
-    workdir = data.fixdir
 
-    edge_masks = _create_edge_masks(func_brainmask, workdir)
+    edge_masks = _create_edge_masks(data, func_brainmask)
 
     out = []
 
@@ -848,37 +856,34 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@cached(
-    cache={},
-    key=lambda func, standard2func_tx, struct, struct2func_xfm, workdir, veins_exf: hashkey('_create_sag_masks')
-)
-def _create_sag_masks(func: nb.Nifti1Image,
+@cached(cache={}, key=lambda *a: hashkey('_create_sag_masks'))
+def _create_sag_masks(data,
+                      func: nb.Nifti1Image,
                       standard2func_tx: nb.Nifti1Image,
                       struct: nb.Nifti1Image,
                       struct2func_xfm: str,
-                      workdir,
                       veins_exf: nb.Nifti1Image = None) -> List[str]:
+
     log.info('Creating sagittal masks')
 
-    FSLDIR = os.getenv('FSLDIR', '')
 
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
         log.info('Affine registration of native structural to standard (MNI152)')
 
-        struct2std = op.join(workdir, 'struct2std.mat')
+        ref        = get_standard('brain', resolution=1)
+        struct2std = data.fix_tree.get('struct2std')
+        std2struct = data.fix_tree.get('std2struct')
         flirt(
             src=struct,
-            ref=op.join(FSLDIR, 'data/standard/MNI152_T1_1mm_brain'),
+            ref=ref,
             omat=struct2std,
         )
 
-        std2struct = op.join(workdir, 'std2struct.mat')
         invxfm(struct2std, std2struct)
 
         if struct2func_xfm.endswith('.mat'):
-
-            standard2func_tx = op.join(workdir, 'std2func.mat')
+            standard2func_tx = data.fix_tree.get('std2func')
             concatxfm(
                 std2struct,
                 struct2func_xfm,
@@ -887,7 +892,7 @@ def _create_sag_masks(func: nb.Nifti1Image,
 
         elif struct2func_xfm.endswith('.nii.gz'):
 
-            standard2func_tx = op.join(workdir, 'std2func_warp.nii.gz')
+            standard2func_tx = data.fix_tree.get('std2func_warp')
             convertwarp(
                 ref=func,
                 premat=std2struct,
@@ -904,30 +909,32 @@ def _create_sag_masks(func: nb.Nifti1Image,
     start = 0
 
     if veins_exf is not None:
-        fname = op.join(workdir, f'std1mm2exfunc0.nii.gz')
+        fname = data.fix_tree.get('std1mm2exfunc0')
         veins_exf.to_filename(fname)
         sag_masks[0, 0] = nb.load(fname)
 
-        fslmaths(fname).dilF().run(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
-        sag_masks[0, 1] = nb.load(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
+        mdil  = data.fix_tree.get('std1mm2exfunc0dil')
+        mdil2 = data.fix_tree.get('std1mm2exfunc0dil2')
 
-        fslmaths(fname).dilF().dilF().run(op.join(workdir, f'std1mm2exfunc0dil2.nii.gz'))
-        sag_masks[0, 2] = nb.load(op.join(workdir, 'std1mm2exfunc0dil2.nii.gz'))
+        fslmaths(fname).dilF().run(mdil)
+        sag_masks[0, 1] = nb.load(mdil)
+
+        fslmaths(fname).dilF().dilF().run(mdil2)
+        sag_masks[0, 2] = nb.load(mdil2)
 
         start += 1
 
     for r in range(start, sag_masks.shape[0]):
         for c, dlabel in enumerate(('', 'dil', 'dil2')):
-            in_name = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
-            out_name = op.join(workdir, f'std1mm2exfunc{r}{dlabel}')
+            in_name  = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
+            out_name = data.fix_tree.get(f'std1mm2exfunc{r}{dlabel}')
 
             sag_masks[r, c] = _apply_xfm(
                 src=in_name,
                 ref=func,
                 xfm=standard2func_tx,
                 interp='spline',
-                out_name=out_name + '.nii.gz'
-            )
+                out_name=out_name)
 
     return list(sag_masks)
 
@@ -959,11 +966,11 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
     wch = icmap_abs > ic_threshold
 
     sag_masks = _create_sag_masks(
+        data=data,
         func=func_mean,
         standard2func_tx=standard2func_tx,
         struct=struct,
         struct2func_xfm=struct2func_xfm,
-        workdir=workdir,
         veins_exf=veins_exf,
     )
 
@@ -992,14 +999,13 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
 
 @feature_extractor
 def stripe(data, ic_idx):
-    icmap = nb.load(_get_ic_filename(data, ic_idx))
 
-    dm1 = op.join(op.dirname(icmap.get_filename()), 'dummy01')
-    util.run(['fslmaths', icmap.get_filename(), '-s', '2', '-abs', dm1])
-    util.run(['fslmaths', icmap.get_filename(), '-abs', '-s', '2', '-sub', dm1, '-abs', dm1])
-    p95 = float(util.run(['fslstats', dm1, '-P', '95']))
+    icmap = _get_ic_filename(data, ic_idx)
+    dm1   = data.fix_tree.get('stripe')
 
-    # util.run(['imrm', dm1])
-    os.remove(dm1+'.nii.gz')
+    fslmaths(icmap).s(2).abs().run(dm1)
+    fslmaths(icmap).abs().s(2).sub(dm1).abs().run(dm1)
+
+    p95 = fslstats(dm1).P(95).run()
 
     return [p95]
