@@ -1,44 +1,20 @@
 #!/usr/bin/env python
-import sys
-from enum import Enum, unique
-from subprocess import check_output
-from typing import List, Tuple
+
 import logging
-import time
 import os.path as op
+
+from typing import Tuple
+
 import nibabel as nb
 import numpy as np
-import json
-
-
-log = logging.getLogger(__name__)
 
 
 def weak_import(name):
+    """Try to import a module, returning None if the import fails. """
     try:
         return __import__(name)
     except ImportError:
         return None
-
-
-def run(cmd: List[str]) -> str:
-    log.debug(" ".join(cmd))
-    # sys.stdout.flush()
-    jobout = check_output(cmd)
-    return jobout.decode('utf-8').strip()
-
-
-def elapsedtime(func):
-    def wrapper(*args, **kwargs):
-        start = time.time()
-
-        try:
-            value = func(*args, **kwargs)
-        finally:
-            log.info('Elapsed: {}'.format(time.time() - start))
-
-        return value
-    return wrapper
 
 
 def assert_file_exists(*args):
@@ -48,16 +24,9 @@ def assert_file_exists(*args):
             raise FileNotFoundError(f)
 
 
-@unique
-class SegType(Enum):
-    """Enum for supported segmentation type."""
-    fsl_fast = 1
-    freesurfer_wmparc = 2
-
-
 def get_resource_path() -> str:
     rpath = op.realpath(
-        op.join(op.dirname(op.abspath(__file__)), "./resources"))
+        op.join(op.dirname(op.abspath(__file__)), "resources"))
     return rpath
 
 
@@ -70,9 +39,7 @@ def get_resource(name) -> str:
 def create_mask(dseg: str,
                 labels: Tuple[int],
                 outname: str = None):
-    """
 
-    """
     dseg = nb.load(str(dseg))
     d = dseg.get_fdata()
 
@@ -87,15 +54,3 @@ def create_mask(dseg: str,
         nii.to_filename(str(outname))
 
     return nii
-
-def dict2json(dict, jsonfile, indent=4):
-    """Write dictionary to json file."""
-    with open(jsonfile, 'w') as outfile:
-        json.dump(dict, outfile, indent=indent)
-
-
-def json2dict(jsonfile):
-    """Read dictionary from json file."""
-    with open(jsonfile, 'r') as infile:
-        d = json.load(infile)
-    return d

@@ -9,8 +9,9 @@ import scipy
 import logging
 from tempfile import TemporaryDirectory
 
+from fsl.wrappers import fslmaths
+
 from pyfix.io import load_motion_parameters
-from pyfix.util import run
 
 log = logging.getLogger(__name__)
 
@@ -98,11 +99,11 @@ def highpass_filter(func, temporal_fwhm, tr, tmpdir=None, retain_mean=False):
 
         _, N = create_dummy_nifti(func, tr=tr, fname=dummy)
 
-        run(f"fslmaths {dummy} -Tmean {mean}".split())
-        run(f"fslmaths {dummy} -bptf {sigma} -1 {dummy}".split())
+        fslmaths(dummy).Tmean().run(mean)
+        fslmaths(dummy).bptf(sigma, -1).run(dummy)
 
         if retain_mean:
-            run(f"fslmaths {dummy} -add {mean} {dummy}".split())
+            fslmaths(dummy).add(mean).run(dummy)
 
         func = _revert_dummy_nifti(dummy, n=N)
 
