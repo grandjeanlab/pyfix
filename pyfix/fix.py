@@ -137,12 +137,17 @@ def assert_has_hand_labels(meldir):
 def run_feature_extraction(meldir     : str,
                            input_tree : str = None,
                            fix_tree   : str = None,
+                           outdir     : str = None,
                            **kwargs):
 
     assert_is_melodic_dir(meldir)
 
+    if outdir is None:
+        outdir = op.join(meldir)
+
     # instantiate FixData object
-    indir = io.InputDirectory.from_input_dir(meldir, input_tree, fix_tree)
+    indir = io.InputDirectory.from_input_dir(
+        meldir, input_tree, fix_tree, outdir)
     d     = extract.FixData.from_input_dir(indir)
 
     # extract legacy features
@@ -439,6 +444,7 @@ def main(argv=None):
     # FEATURE parser
     feature_parser = argparse.ArgumentParser(**opts)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
+    feature_parser.add_argument('-o', '--outdir')
 
     # TRAIN parser
     train_parser = argparse.ArgumentParser(**opts)

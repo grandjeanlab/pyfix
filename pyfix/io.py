@@ -29,7 +29,7 @@ except ImportError:
 from file_tree import FileTree
 
 import pyfix
-from pyfix.util import weak_import
+from pyfix.util import weak_import, get_resource
 
 
 xgboost = weak_import('xgboost')
@@ -111,17 +111,20 @@ class InputDirectory:
             input_dir  : str,
             input_tree : str = None,
             fix_tree   : str = None,
+            fix_dir    : str = None
     ) -> InputDirectory:
-        if input_tree is None:
-            input_tree = util.get_resource('melodic.tree')
-        if fix_tree is None:
-            fix_tree = util.get_resource('pyfix.tree')
+
+        if input_tree is None: input_tree = get_resource('melodic.tree')
+        if fix_tree   is None: fix_tree   = get_resource('pyfix.tree')
 
         input_tree = FileTree.read(input_tree, input_dir)
-        fixdir     = input_tree.get('fixdir')
-        fix_tree   = FileTree.read(fix_tree, fixdir)
 
-        return InputDirectory(input_dir, fixdir, input_tree, fix_tree)
+        if fix_dir is None:
+            fix_dir = input_tree.get('fixdir')
+
+        fix_tree = FileTree.read(fix_tree, fix_dir)
+
+        return InputDirectory(input_dir, fix_dir, input_tree, fix_tree)
 
 
 def load_motion_parameters(fname):
