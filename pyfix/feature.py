@@ -810,10 +810,9 @@ def _create_edge_masks(data, func_brain_mask):
         edge_masks = []
 
         for i in range(5):
-            tree = data.fix_tree.update(ero=i + 1)
-            ero_masks .append(tree.get(f'maske{i + 1}'))
-            edge_masks.append(tree.get(f'edge{i + 1}'))
-
+            tree = data.fix_tree.update(ero=(i + 1))
+            ero_masks .append(tree.get('ero_mask'))
+            edge_masks.append(tree.get('edge_mask'))
 
         for i in range(5):
             fslmaths(ero_masks[i]).eroF().run(ero_masks[i + 1])

@@ -485,7 +485,7 @@ def main(argv=None):
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
 
-    if argv is not None:
+    if argv is None:
         argv = sys.argv[1:]
 
     if len(argv) == 0:

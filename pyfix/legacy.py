@@ -57,7 +57,7 @@ def read_features(path: str):
 
     """
 
-    return pd.read_csv(filename, header=None, names=LEGACY_FEATURE_LABELS)
+    return pd.read_csv(path, header=None, names=LEGACY_FEATURE_LABELS)
 
 
 def save_features(path : str, features : pd.DataFrame):
