@@ -406,7 +406,7 @@ def setup_logging(logfile):
     warnings.filterwarnings('ignore', module='xgboost')
 
 
-def main():
+def main(argv=None):
 
     # options passed to all ArgumentParser objects
     opts = {'add_help'     : False,
@@ -478,11 +478,13 @@ def main():
                               type=float, default=-1)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
-    argv = sys.argv[1:]
+
+    if argv is not None:
+        argv = sys.argv[1:]
 
     if len(argv) == 0:
         print(USAGE)
-        sys.exit()
+        return
 
     # all sub-commands except for main
     # are selected with a switch
@@ -492,7 +494,7 @@ def main():
 
     if switch == '-h':
         print(USAGE)
-        sys.exit()
+        return
 
     switches = defaultdict(
         lambda: (main_parser,     run_main),
@@ -506,7 +508,7 @@ def main():
     args            = parser.parse_args(argv)
 
     setup_logging(args.logfile)
-    log.info('Pyfix command: %s', ' '.join(sys.argv))
+    log.info('Pyfix command: %s', ' '.join(argv))
 
     runfunc(**vars(args))
 
