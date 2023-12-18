@@ -782,7 +782,7 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
     icmap2 = data.fix_tree.get('maxtfce')
 
     fslmaths(icmap).abs().div(std).tfce(2, 0.5, 6).run(icmap2)
-    out += [fslstats(icmap2).P(100).run()[0]]
+    out += [fslstats(icmap2).P(100).run()]
 
     fslmaths(icmap).abs().tfce(2, 0.5, 6).run(icmap2)
     out += [fslstats(icmap2).P(100).run()]
