@@ -47,3 +47,8 @@ pyfix = ["VERSION", "resources/*", "resources/masks/*", "examples/*"]
 
 [tool.setuptools.dynamic]
 version = {file = "pyfix/VERSION"}
+
+
+[tool.pytest.ini_options]
+testpaths = ["pyfix/tests"]
+addopts   = "-v --cov=pyfix --showlocals --import-mode=importlib"
