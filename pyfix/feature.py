@@ -23,7 +23,7 @@ from fsl.wrappers import (fslmaths,
                           invxfm,
                           convertwarp,
                           cluster,
-                          smoothest)
+                          smoothest as smoothest_cmd)
 from sklearn import linear_model
 from spectrum import aryule
 
@@ -696,7 +696,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
 
     clf = linear_model.LinearRegression()
 
-    ts = ts / scipy.std(ts)
+    ts = ts / np.std(ts)
     N = ts.shape[0]
 
     X = np.concatenate((
@@ -735,9 +735,12 @@ def smoothest(data, ic_idx):
 
     icmap = _get_ic_filename(data, ic_idx)
     func_brain_mask = _get_brainmask_filename(data)
-    smth = smoothest(zstat=icmap, mask=func_brain_mask)
+    smth = smoothest_cmd(zstat=icmap, mask=func_brain_mask)
 
-    return smth['RESELS']
+    # compatibility: in old fix this value
+    # is referred to as "smoothest:0", so
+    # we return it as a list of length 1
+    return [smth['RESELS']]
 
 
 @feature_extractor

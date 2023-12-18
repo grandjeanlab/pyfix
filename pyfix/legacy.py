@@ -13,6 +13,14 @@ from fsl.data import fixlabels
 
 log = logging.getLogger(__name__)
 
+# Feature extractors which return multiple values will
+# have an index appended to their name, e.g.:
+#
+#     @feature_extractor
+#     def myfeature():
+#         return [1,2,3]
+#
+# will result in myfeature:0, myfeature:1, myfeature:2
 LEGACY_FEATURE_LABELS = [
     'nic',
     *[f'arvswgn:{i}' for i in np.arange(2)],
