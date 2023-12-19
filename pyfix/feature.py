@@ -88,11 +88,18 @@ def pixdim(data, ic_idx):
 
 @feature_extractor
 def arvswgn(data, ic_idx, norder=6):
-    ts = data.ica.get_timecourse(ic_idx)
+
+    ts   = data.ica.get_timecourse(ic_idx)
     mvec = np.zeros(norder)
+
     for i in range(norder):
         mvec[i] = aryule(ts, i + 1)[1]
-    return list(np.polyfit(np.arange(norder), mvec, 1))
+
+    x     = 1 + np.arange(norder)
+    coefs = np.polynomial.Polynomial.fit(x, mvec, 1)
+    coefs = reversed(coefs.convert().coef)
+
+    return list(coefs)
 
 
 @feature_extractor
