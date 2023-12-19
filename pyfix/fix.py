@@ -142,9 +142,6 @@ def run_feature_extraction(meldir     : str,
 
     assert_is_melodic_dir(meldir)
 
-    if outdir is None:
-        outdir = op.join(meldir)
-
     # instantiate FixData object
     indir = io.InputDirectory.from_input_dir(
         meldir, input_tree, fix_tree, outdir)

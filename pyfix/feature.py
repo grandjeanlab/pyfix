@@ -111,7 +111,16 @@ def arfull(data, ic_idx, norder=(1, 2)):
 def entropy(data, ic_idx):
     ts = data.ica.get_timecourse(ic_idx)
 
-    bins = np.linspace(-2, 2, int(np.floor(np.sqrt(ts.shape[0]))))
+    # generate bin centres
+    centres = np.linspace(-2, 2, int(np.floor(np.sqrt(ts.shape[0]))))
+    length  = centres[1] - centres[0]
+
+    # convert to bin edges
+    bins       = np.zeros(centres.shape[0] + 1)
+    bins[0]    = min(centres[0], ts.min())
+    bins[1:-1] = centres[:-1] + length / 2
+    bins[  -1] = max(centres[-1], ts.max())
+
     X = np.histogram(ts, bins=bins)[0]
     X = X / np.sum(X)
     X = -np.sum(X * np.log(X + np.finfo(float).eps))
