@@ -1,0 +1,41 @@
+stages:
+  - docker
+  - test
+  - fsl-ci-pre
+  - fsl-ci-build
+  - fsl-ci-test
+  - fsl-ci-deploy
+
+# Build docker image used for unit tests
+build-dev-docker-image:
+  stage: docker
+  image: docker:latest
+  tags:
+    - docker_build
+  services:
+    - docker:dind
+  when: manual
+  allow_failure: true
+
+  script:
+    - mkdir -p $HOME/.docker/
+    - echo $DOCKER_AUTH_CONFIG > $HOME/.docker/config.json
+    - TAG="$(date +%Y%m%d).${CI_COMMIT_SHORT_SHA}"
+    - IMAGE="pauldmccarthy/pyfix-dev"
+    - DOCKERFILE=.docker/Dockerfile
+    - docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" -f ${DOCKERFILE} ./.docker/
+    - docker push "${IMAGE}:${TAG}"
+    - docker push "${IMAGE}:latest"
+
+
+test:
+  stage: test
+  image: pauldmccarthy/pyfix-dev
+  tags:
+    - docker
+  rules:
+    - if:   $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+  script:
+    - pytest
