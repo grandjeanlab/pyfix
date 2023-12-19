@@ -15,8 +15,9 @@ import pandas  as pd
 
 from fsl.utils.tempdir import tempdir
 
-from pyfix import fix
-from pyfix.tests import unzip
+from pyfix             import (fix,
+                               legacy)
+from pyfix.tests       import  unzip
 
 
 DATADIR           = op.join(op.dirname(__file__), 'testdata')
@@ -35,24 +36,46 @@ def test_feature_extraction():
     """
     """
     with tempdir():
+    """Test fix -f rest.ica"""
 
         unzip(DATA_ARCHIVE)
         unzip(FIXDIR_ARCHIVE)
 
         fix.main(shlex.split('-f rest.ica'))
 
-        for filename in ['features.csv', 'features.pyfix_features']:
-            got    = op.join('rest.ica', 'fix', filename)
-            expect = op.join(            'fix', filename)
-            assert np.all(np.isclose(got.values, expect.values))
+        got = legacy.read_features(op.join('rest.ica', 'fix', 'features.csv'))
+        exp = legacy.read_features(op.join(            'fix', 'features.csv'))
 
+        for col in legacy.LEGACY_FEATURE_LABELS:
+            gotcol = got[col]
+            expcol = exp[col]
+            if np.all(np.isclose(gotcol, expcol)):
+                continue
+
+            exprange = expcol.max() - expcol.min()
+            maxerr   = (gotcol - expcol).abs().max() / exprange
+            corr     = gotcol.corr(expcol)
+
+            assert corr > 0.99
+
+            # fftfinerwrtnull generates a random null
+            # distribution, so results are expected to
+            # differ
+            if col.startswith('fftfinerwrtnull'):
+                assert maxerr < 0.10
+            else:
+                assert maxerr < 0.01
 
 
 def test_train():
+    """Test
+      - fix -t pyfix_training    *.ica
+      - fix -t pyfix_training -l *.ica
     """
-    """
+
     with tempdir():
         unzip(TRAINDATA_ARCHIVE)
+
         indirs = ' '.join(sorted(glob.glob('*.ica')))
 
         fix.main(shlex.split(f'-t training1 {indirs}'))
