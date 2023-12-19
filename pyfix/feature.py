@@ -157,7 +157,7 @@ def tsjump(data, ic_idx):
     mx = np.amax(np.abs(diff_ts))
     imx = np.argmax(np.abs(diff_ts))
 
-    sel = np.arange(imx - 2, imx + 2)
+    sel = np.arange(imx - 2, imx + 3)
 
     x1 = sel >= 0
     x2 = sel < diff_ts.shape[0]
@@ -253,7 +253,7 @@ def fftfiner(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
 
 @feature_extractor
 def fftfinerwrtnull(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
-    # Concolve single-gamma HRF w/WGN and compare its spectrum w/actual RSN
+    # Convolve single-gamma HRF w/WGN and compare its spectrum w/actual RSN
     # do it for real
 
     ts = data.ica.get_timecourse(ic_idx)
@@ -951,7 +951,7 @@ def _create_sag_masks(data,
                 src=in_name,
                 ref=func,
                 xfm=standard2func_tx,
-                interp='spline',
+                interp='trilinear',
                 out_name=out_name)
 
     return list(sag_masks)
