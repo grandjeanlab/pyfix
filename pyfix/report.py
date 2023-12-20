@@ -66,7 +66,7 @@ def report_loo(y, y_pred_pb, test_idx, threshold=(1, 2, 5, 10, 20, 30, 40, 50), 
 
     for thr0 in threshold:
 
-        y_pred = prob_threshold(y_pred_pb, threshold=thr0)
+        y_pred = legacy.prob_threshold(y_pred_pb, threshold=thr0)
 
         for fold, idx in enumerate(test_idx):
             cm = metrics.confusion_matrix(y[idx], y_pred[idx], labels=labels)
