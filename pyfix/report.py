@@ -10,7 +10,7 @@ from   sklearn import metrics
 
 import fsl.utils.path as fslpath
 
-from pyfix import io
+from pyfix import io, legacy
 
 
 def report_evaluate(meldirs, model, thresholds):
@@ -25,12 +25,12 @@ def report_evaluate(meldirs, model, thresholds):
         indir       = io.InputDirectory.from_input_dir(meldir)
         dataset     = op.relpath(indir.indir, basedir)
         nics        = indir.nics
-        hand_labels = read_labels(indir.input_tree.get('hand_labels')), nics)
+        hand_labels = legacy.read_labels(indir.input_tree.get('hand_labels'), nics)
         hand_labels = hand_labels == 0
 
         for threshold in thresholds:
-            model_labels = generate_label_filename(meldir, model, threshold)
-            model_labels = read_labels(model_labels, nics)
+            model_labels = legacy.generate_label_filename(meldir, model, threshold)
+            model_labels = legacy.read_labels(model_labels, nics)
             model_labels = model_labels == 0
 
             cm = metrics.confusion_matrix(hand_labels, model_labels, labels=[0, 1])

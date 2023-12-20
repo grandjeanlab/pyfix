@@ -142,7 +142,7 @@ class InputDirectory:
         features = self.fix_tree.get('legacy_features')
         if op.exists(features):
             features = legacy.read_features(features)
-            return features.iloc[0, 'nic']
+            return features['nic'].loc[0]
 
         raise RuntimeError(f'Cannot determine nics for {self.input_dir}')
 

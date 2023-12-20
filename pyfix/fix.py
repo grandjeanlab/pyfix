@@ -30,6 +30,7 @@ from pyfix import (extract,
                    io,
                    classify,
                    clean,
+                   report,
                    __version__)
 from pyfix.util import weak_import, get_resource
 
@@ -251,8 +252,8 @@ def run_classify(meldir     : str,
     # (as per legacy fix4melview files)
     y          = ~y
     labels     = [['Noise'] if i else ['Signal'] for i in y]
-    modelname  = op.splitext(op.basename(modelfile))[0]
-    label_file = fixtree \
+    modelname  = op.splitext(op.basename(model))[0]
+    label_file = intree \
                    .update(threshold=threshold, model=modelname) \
                    .get('fix_labels')
     fixlabels.saveLabelFile(labels, label_file, meldir)
@@ -268,11 +269,11 @@ def run_evaluate(meldir     : List[str],
     modelname = op.splitext(op.basename(model))[0]
 
     for md in meldir:
-        indir = io.InputDirectory.from_melodic_dir(md)
+        indir = io.InputDirectory.from_input_dir(md)
 
         for threshold in thresholds:
 
-            label_file = indir.fixtree \
+            label_file = indir.input_tree \
                 .update(threshold=threshold, model=modelname) \
                 .get('fix_labels')
             if not op.exists(label_file):
