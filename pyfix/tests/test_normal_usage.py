@@ -5,25 +5,30 @@
 # Author: Paul McCarthy <pauldmccarthy@gmail.com>
 #
 
-import            glob
-import            os
-import os.path as op
-import            shlex
+import              glob
+import itertools as it
+import              os
+import os.path   as op
+import              shlex
+import              shutil
 
 import numpy   as np
 import pandas  as pd
 
-from fsl.utils.tempdir import tempdir
+from fsl.data.fixlabels import loadLabelFile
+from fsl.utils.tempdir  import tempdir
 
-from pyfix             import (fix,
-                               legacy)
-from pyfix.tests       import  unzip
+from pyfix              import (fix,
+                                legacy)
+from pyfix.tests        import  unzip
 
 
 DATADIR           = op.join(op.dirname(__file__), 'testdata')
 DATA_ARCHIVE      = op.join(DATADIR, 'rest.ica.zip')
 FIXDIR_ARCHIVE    = op.join(DATADIR, 'rest.ica.fixdir.zip')
 TRAINDATA_ARCHIVE = op.join(DATADIR, 'training_data.zip')
+TRAINED_MODEL     = op.join(DATADIR, 'training.pyfix_model')
+
 
 
 def test_print_help():
@@ -31,13 +36,9 @@ def test_print_help():
     fix.main(['-h'])
 
 
-
 def test_feature_extraction():
-    """
-    """
-    with tempdir():
     """Test fix -f rest.ica"""
-
+    with tempdir():
         unzip(DATA_ARCHIVE)
         unzip(FIXDIR_ARCHIVE)
 
@@ -68,7 +69,7 @@ def test_feature_extraction():
 
 
 def test_train():
-    """Test
+    """Test:
       - fix -t pyfix_training    *.ica
       - fix -t pyfix_training -l *.ica
     """
@@ -84,3 +85,34 @@ def test_train():
         fix.main(shlex.split(f'-t training2 -l {indirs}'))
         assert op.exists('training2.pyfix_model')
         assert op.exists('training2_LOO_results')
+
+
+def test_classify():
+    """Test:
+      - fix -c rest.ica training.pyfix_model <threshold>
+      - fix -C training.pyfix_model *.ica
+    """
+
+    with tempdir():
+
+        icadir = '1.ica'
+        unzip(TRAINDATA_ARCHIVE)
+        fix.main(shlex.split(f'-c {icadir} {TRAINED_MODEL} 30'))
+
+        model     = op.splitext(op.basename(TRAINED_MODEL))[0]
+        labelfile = legacy.generate_label_filename(icadir, TRAINED_MODEL, 30)
+
+        assert op.exists(labelfile)
+        loadLabelFile(labelfile)
+
+        thresholds = [1, 2, 5, 10]
+        icadirs    = list(glob.glob('?.ica'))
+
+        fix.main(shlex.split(f'-C {TRAINED_MODEL} '
+                             f'-t {",".join(thresholds)} '
+                             f'{" ".join(icadirs)}'))
+
+        for icadir, threshold in  it.product(icadirs, thresholds):
+            labelfile = legacy.generate_label_filename(
+                icadir, TRAINED_MODEL, threshold)
+            assert op.exists(labelfile)
