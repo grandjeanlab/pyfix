@@ -206,9 +206,9 @@ def run_train(meldir      : List[str],
                                                    n_jobs=n_jobs)
 
     if loo is not None:
-        report = report.report_loo(*loo)
+        report_text = report.report_loo(*loo)
         with open(basename + "_LOO_results", 'w') as f:
-            f.write(report)
+            f.write(report_text)
 
     # save model
     io.save_model(basename, clf, threshold)
