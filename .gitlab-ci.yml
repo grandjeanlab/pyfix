@@ -44,6 +44,5 @@ test:
     - when: never
   script:
     - source activate /dev.env
-    - pip install --pre git+https://git.fmrib.ox.ac.uk/fsl/fslpy.git
     - pip install -e .
     - pytest
