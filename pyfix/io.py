@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import            base64
-import            io
-import            json
-import            logging
-import os.path as op
-import            os
-import            tempfile
-import            warnings
+import              base64
+import functools as ft
+import              io
+import              json
+import              logging
+import os.path   as op
+import              os
+import              tempfile
+import              warnings
 
 from dataclasses import dataclass
 from typing      import Tuple
@@ -19,6 +20,8 @@ import nibabel as nb
 import numpy   as np
 import pandas  as pd
 import            sklearn
+
+from pyfix import legacy
 
 # InconsistentVersionWarning was added in sklearn 1.3.0
 try:
@@ -125,6 +128,23 @@ class InputDirectory:
         fix_tree = FileTree.read(fix_tree, fix_dir)
 
         return InputDirectory(input_dir, fix_dir, input_tree, fix_tree)
+
+
+    @property
+    @ft.lru_cache
+    def nics(self):
+        """Return the number of ICs for this input directory."""
+
+        melic = self.input_tree.get('melodic_IC')
+        if op.exists(melic):
+            return nb.load(melic).shape[3]
+
+        features = self.fix_tree.get('legacy_features')
+        if op.exists(features):
+            features = legacy.read_features(features)
+            return features.iloc[0, 'nic']
+
+        raise RuntimeError(f'Cannot determine nics for {self.input_dir}')
 
 
 def load_motion_parameters(fname):
