@@ -109,7 +109,7 @@ def test_classify():
         icadirs    = list(glob.glob('?.ica'))
 
         fix.main(shlex.split(f'-C {TRAINED_MODEL} '
-                             f'-t {",".join(thresholds)} '
+                             f'-t {",".join(map(str, thresholds))} '
                              f'{" ".join(icadirs)}'))
 
         for icadir, threshold in  it.product(icadirs, thresholds):
