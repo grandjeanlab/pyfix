@@ -205,7 +205,7 @@ def run_train(meldir      : List[str],
                                                    n_jobs=n_jobs)
 
     if loo is not None:
-        report = legacy.report_loo(*loo)
+        report = report.report_loo(*loo)
         with open(basename + "_LOO_results", 'w') as f:
             f.write(report)
 
@@ -278,7 +278,7 @@ def run_evaluate(meldir     : List[str],
             if not op.exists(label_file):
                 run_classify(md, model, threshold)
 
-    print(legacy.report_evaluate(meldir, model, thresholds))
+    print(report.report_evaluate(meldir, model, thresholds))
 
 
 def run_apply(labels     : str,

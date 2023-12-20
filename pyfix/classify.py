@@ -13,7 +13,7 @@ from sklearn import metrics
 from sklearn.base import clone
 from sklearn.model_selection import LeaveOneGroupOut
 
-from pyfix import io, legacy
+from pyfix import io, legacy, report
 from pyfix.util import weak_import
 
 xgboost = weak_import('xgboost')
@@ -57,7 +57,7 @@ def calculate_loo_metrics(y, y_pred_pb, test_idx, threshold=None, labels=None):
             m['fold'] = fold
             m['threshold'] = thr0
 
-            m['tpr'], m['tnr'], m['(3*tpr+tnr)/4'] = legacy.fix_metric(m['confusion_matrix'])
+            m['tpr'], m['tnr'], m['(3*tpr+tnr)/4'] = report.fix_metric(m['confusion_matrix'])
 
             records += [m]
 
@@ -224,7 +224,7 @@ def tuned_train(table: pd.DataFrame,
 
         for idx in test_idx:
             cm = metrics.confusion_matrix(y[idx], y_pred[idx], labels=[0, 1])
-            score += 1 - legacy.fix_metric(cm)[2]
+            score += 1 - report.fix_metric(cm)[2]
 
         return score
 
