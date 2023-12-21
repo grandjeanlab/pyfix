@@ -372,7 +372,7 @@ def run_apply(labels     : str,
 
 def run_main(**kwargs):
     run_feature_extraction(**kwargs)
-    args.labels = run_classify(**kwargs)
+    kwargs['labels'] = run_classify(**kwargs)
     run_apply(**kwargs)
 
 
