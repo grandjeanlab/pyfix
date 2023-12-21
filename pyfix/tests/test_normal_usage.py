@@ -19,8 +19,10 @@ from fsl.data.fixlabels import loadLabelFile
 from fsl.utils.tempdir  import tempdir
 
 from pyfix              import (fix,
+                                io,
                                 legacy)
-from pyfix.tests        import  unzip
+from pyfix.tests        import (unzip,
+                                indir)
 
 
 DATADIR           = op.join(op.dirname(__file__), 'testdata')
@@ -30,19 +32,28 @@ TRAINDATA_ARCHIVE = op.join(DATADIR, 'training_data.zip')
 TRAINED_MODEL     = op.join(DATADIR, 'training.pyfix_model')
 
 
+def main(cmd=''):
+    return fix.main(shlex.split(cmd))
+
 
 def test_print_help():
-    fix.main([])
-    fix.main(['-h'])
+    """Test the following commands:
+      - fix
+      - fix -h
+    """
+    main()
+    main('-h')
 
 
 def test_feature_extraction():
-    """Test fix -f rest.ica"""
+    """Test the following commands:
+      - fix -f rest.ica
+    """
     with tempdir():
         unzip(DATA_ARCHIVE)
         unzip(FIXDIR_ARCHIVE)
 
-        fix.main(shlex.split('-f rest.ica'))
+        main('-f rest.ica')
 
         got = legacy.read_features(op.join('rest.ica', 'fix', 'features.csv'))
         exp = legacy.read_features(op.join(            'fix', 'features.csv'))
@@ -69,7 +80,7 @@ def test_feature_extraction():
 
 
 def test_train():
-    """Test:
+    """Test the following commands:
       - fix -t pyfix_training    *.ica
       - fix -t pyfix_training -l *.ica
     """
@@ -79,16 +90,16 @@ def test_train():
 
         indirs = ' '.join(sorted(glob.glob('*.ica')))
 
-        fix.main(shlex.split(f'-t training1 {indirs}'))
+        main(f'-t training1 {indirs}')
         assert op.exists('training1.pyfix_model')
 
-        fix.main(shlex.split(f'-t training2 -l {indirs}'))
+        main(f'-t training2 -l {indirs}')
         assert op.exists('training2.pyfix_model')
         assert op.exists('training2_LOO_results')
 
 
 def test_classify():
-    """Test:
+    """Test the following commands:
       - fix -c rest.ica training.pyfix_model <threshold>
       - fix -C training.pyfix_model *.ica
     """
@@ -97,7 +108,7 @@ def test_classify():
 
         icadir = '1.ica'
         unzip(TRAINDATA_ARCHIVE)
-        fix.main(shlex.split(f'-c {icadir} {TRAINED_MODEL} 30'))
+        main(f'-c {icadir} {TRAINED_MODEL} 30')
 
         model     = op.splitext(op.basename(TRAINED_MODEL))[0]
         labelfile = legacy.generate_label_filename(icadir, TRAINED_MODEL, 30)
@@ -108,11 +119,47 @@ def test_classify():
         thresholds = [1, 2, 5, 10]
         icadirs    = list(glob.glob('?.ica'))
 
-        fix.main(shlex.split(f'-C {TRAINED_MODEL} '
-                             f'-t {",".join(map(str, thresholds))} '
-                             f'{" ".join(icadirs)}'))
+        main(f'-C {TRAINED_MODEL} '
+             f'-t {",".join(map(str, thresholds))} '
+             f'{" ".join(icadirs)}')
 
         for icadir, threshold in  it.product(icadirs, thresholds):
             labelfile = legacy.generate_label_filename(
                 icadir, TRAINED_MODEL, threshold)
             assert op.exists(labelfile)
+
+
+def test_cleanup():
+    """Test the following commands:
+      - fix -a labels.txt mel.ica
+      - fix -a labels.txt mel.ica -m
+      - fix -a labels.txt mel.ica -A
+    """
+
+    flag_variants = ['', '-m' '-A']
+
+    for flags in flag_variants:
+        with tempdir():
+            unzip(DATA_ARCHIVE)
+            unzip(FIXDIR_ARCHIVE, 'rest.ica')
+
+            meldir    = io.InputDirectory.from_input_dir('rest.ica')
+            labelfile = meldir.input_tree.get('hand_labels')
+
+            main(f'-a {labelfile} {flags}')
+
+            assert op.exists(meldir.input_tree.get('filtered_func_data_clean'))
+
+
+
+def test_full_run():
+    """Test the following commands:
+      - fix rest.ica training.pyfix_model <threshold>
+    """
+    with tempdir():
+        unzip(DATA_ARCHIVE)
+        unzip(FIXDIR_ARCHIVE, 'rest.ica'):
+        main(f'rest.ica {TRAINED_MODEL} 20')
+
+        meldir = io.InputDirectory.from_input_dir('rest.ica')
+        assert op.exists(meldir.input_tree.get('filtered_func_data_clean'))
