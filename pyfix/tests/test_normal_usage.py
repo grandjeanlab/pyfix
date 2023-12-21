@@ -136,7 +136,7 @@ def test_cleanup():
       - fix -a labels.txt mel.ica -A
     """
 
-    flag_variants = ['', '-m' '-A']
+    flag_variants = ['', '-m', '-A']
 
     for flags in flag_variants:
         with tempdir():
@@ -158,7 +158,7 @@ def test_full_run():
     """
     with tempdir():
         unzip(DATA_ARCHIVE)
-        unzip(FIXDIR_ARCHIVE, 'rest.ica'):
+        unzip(FIXDIR_ARCHIVE, 'rest.ica')
         main(f'rest.ica {TRAINED_MODEL} 20')
 
         meldir = io.InputDirectory.from_input_dir('rest.ica')
