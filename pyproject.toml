@@ -51,4 +51,4 @@ version = {file = "pyfix/VERSION"}
 
 [tool.pytest.ini_options]
 testpaths = ["pyfix/tests"]
-addopts   = "-v --cov=pyfix --showlocals --import-mode=importlib"
+addopts   = "-v --cov=pyfix --showlocals --import-mode=importlib --durations=0"
