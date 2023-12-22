@@ -42,7 +42,6 @@ test:
     - if:   $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: always
     - when: never
+
   script:
-    - source activate /dev.env
-    - pip install -e .
-    - pytest
+    - bash .ci/unit_tests.sh
