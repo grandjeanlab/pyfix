@@ -61,7 +61,7 @@ def compare_4D_data(got, exp):
 
 
 def crop(data, params):
-    xlo, xlen, ylo, ylen, zlo, zlen = params
+    xlo, xlen, ylo, ylen, zlo, zlen = params[:6]
     return data[xlo:xlo + xlen,
                 ylo:ylo + ylen,
                 zlo:zlo + zlen]
@@ -190,7 +190,7 @@ def test_cleanup():
             gotvn = Image(gotvn).data
             expvn = Image(expvn).data
 
-            roiparams = np.loadtxt(op.join('fslroi_params.txt'))
+            roiparams = np.loadtxt('fslroi_params.txt', dtype=int)
             got       = crop(got,   roiparams)
             gotvn     = crop(gotvn, roiparams)
 
