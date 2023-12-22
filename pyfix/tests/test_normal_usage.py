@@ -15,6 +15,7 @@ import              shutil
 import numpy   as np
 import pandas  as pd
 
+from fsl.data.image     import Image
 from fsl.data.fixlabels import loadLabelFile
 from fsl.utils.tempdir  import tempdir
 
@@ -25,15 +26,45 @@ from pyfix.tests        import (unzip,
                                 indir)
 
 
-DATADIR           = op.join(op.dirname(__file__), 'testdata')
-DATA_ARCHIVE      = op.join(DATADIR, 'rest.ica.zip')
-FIXDIR_ARCHIVE    = op.join(DATADIR, 'rest.ica.fixdir.zip')
-TRAINDATA_ARCHIVE = op.join(DATADIR, 'training_data.zip')
-TRAINED_MODEL     = op.join(DATADIR, 'training.pyfix_model')
+DATADIR              = op.join(op.dirname(__file__), 'testdata')
+DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
+FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
+TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
+TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
+CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
 
 
 def main(cmd=''):
     return fix.main(shlex.split(cmd))
+
+
+def compare_arrays(got, exp):
+    exprange = exp.max() - exp.min()
+    maxerr   = (got - exp).abs().max() / exprange
+    return maxerr
+
+
+def compare_4D_data(got, exp):
+
+    assert np.all(got.shape == exp.shape)
+    assert compare_arrays(got, exp) < 0.01
+
+    got      = got.reshape(-1, got.shape[3])
+    exp      = exp.reshape(-1, exp.shape[3])
+    nvoxels  = got.shape[0]
+    corrs    = np.zeros(nvoxels)
+
+    for i in range(nvoxels):
+        corrs[i] = np.corrcoef(got[i], exp[i])[0, 1]
+
+    assert corrs.min() > 0.99
+
+
+def crop(data, params):
+    xlo, xlen, ylo, ylen, zlo, zlen = params
+    return data[xlo:xlo + xlen,
+                ylo:ylo + ylen,
+                zlo:zlo + zlen]
 
 
 def test_print_help():
@@ -64,9 +95,8 @@ def test_feature_extraction():
             if np.all(np.isclose(gotcol, expcol)):
                 continue
 
-            exprange = expcol.max() - expcol.min()
-            maxerr   = (gotcol - expcol).abs().max() / exprange
-            corr     = gotcol.corr(expcol)
+            maxerr = compare_arrays(gotcol, expcol)
+            corr   = gotcol.corr(expcol)
 
             assert corr > 0.99
 
@@ -141,15 +171,31 @@ def test_cleanup():
     for flags in flag_variants:
         with tempdir():
             unzip(DATA_ARCHIVE)
-            unzip(FIXDIR_ARCHIVE, 'rest.ica')
+            unzip(CLEANED_DATA_ARCHIVE)
 
             meldir    = io.InputDirectory.from_input_dir('rest.ica')
             labelfile = meldir.input_tree.get('hand_labels')
 
             main(f'-a {labelfile} {flags}')
 
-            assert op.exists(meldir.input_tree.get('filtered_func_data_clean'))
+            got      = meldir.input_tree.get('filtered_func_data_clean')
+            gotvn    = meldir.input_tree.get('filtered_func_data_clean_vn')
+            cleandir = ('clean' + ' ' + flags).strip()
+            cleandir = cleandir.replace(' ', '_')
+            exp   = op.join(cleandir, op.basename(got))
+            expvn = op.join(cleandir, op.basename(gotvn))
 
+            got   = Image(got).data
+            exp   = Image(exp).data
+            gotvn = Image(gotvn).data
+            expvn = Image(expvn).data
+
+            roiparams = np.loadtxt(op.join('fslroi_params.txt'))
+            got       = crop(got,   roiparams)
+            gotvn     = crop(gotvn, roiparams)
+
+            assert np.all(gotvn.shape == expvn.shape)
+            compare_4D_data(got, exp)
 
 
 def test_full_run():
@@ -162,4 +208,6 @@ def test_full_run():
         main(f'rest.ica {TRAINED_MODEL} 20')
 
         meldir = io.InputDirectory.from_input_dir('rest.ica')
-        assert op.exists(meldir.input_tree.get('filtered_func_data_clean'))
+        got    = meldir.input_tree.get('filtered_func_data_clean')
+
+        assert op.exists(got)
