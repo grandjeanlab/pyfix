@@ -309,8 +309,7 @@ class FixData:
         # filter, and normalise motion confounds, as required
         if mp is not None:
             mp = clean.motion_confounds(
-                mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=indir)
-            mp = clean._normalise(mp)
+                mp, tr=tr, temporal_fwhm=highpass_fwhm)
 
         # instantiate class
         d = cls(

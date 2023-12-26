@@ -309,7 +309,6 @@ def run_apply(labels     : str,
     icamix                  = ftree.get('melodic_mix')
 
     motion_parameters       = ftree.get('motion_params')
-    motion_parameters_filt  = ftree.get('motion_params_filtered')
     motion_parameters_clean = ftree.get('motion_params_cleaned')
 
     ddremove = legacy.read_labels(labels)
@@ -324,15 +323,6 @@ def run_apply(labels     : str,
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
 
-    # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
-    # create if they don't
-    if (not op.exists(motion_parameters_filt)) and \
-       op.exists(motion_parameters):
-        mp0 = clean.motion_confounds(
-            motion_parameters, tr=tr, temporal_fwhm=highpass, tmpdir=meldir)
-        clean.create_dummy_nifti(
-            mp0.astype(np.float32), tr=tr, fname=motion_parameters_filt)
-
     # clean filtered_func_data.nii.gz
     clean.apply(
         func_fname=nifti_filt,
@@ -340,7 +330,7 @@ def run_apply(labels     : str,
         noise_idx=ddremove,
         func_clean_fname=nifti_clean,
         do_motion_regression=motion,
-        motion_parameters=motion_parameters_filt,
+        motion_parameters=motion_parameters,
         func_tr=tr,
         aggressive=aggressive,
         varnorm_fname=nifti_clean_varnorm,
@@ -363,7 +353,7 @@ def run_apply(labels     : str,
             noise_idx=ddremove,
             func_clean_fname=cifti_clean,
             do_motion_regression=motion,
-            motion_parameters=motion_parameters_filt,
+            motion_parameters=motion_parameters,
             func_tr=tr,
             aggressive=aggressive,
             varnorm_fname=cifti_clean_varnorm,
