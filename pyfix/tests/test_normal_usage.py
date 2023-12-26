@@ -40,14 +40,14 @@ def main(cmd=''):
 
 def compare_arrays(got, exp):
     exprange = exp.max() - exp.min()
-    maxerr   = (got - exp).abs().max() / exprange
+    maxerr   = np.abs(got - exp).max() / exprange
     return maxerr
 
 
-def compare_4D_data(got, exp):
+def compare_4D_data(got, exp, err=0.01, corr=0.99):
 
     assert np.all(got.shape == exp.shape)
-    assert compare_arrays(got, exp) < 0.01
+    assert compare_arrays(got, exp) < err
 
     got      = got.reshape(-1, got.shape[3])
     exp      = exp.reshape(-1, exp.shape[3])
@@ -57,7 +57,7 @@ def compare_4D_data(got, exp):
     for i in range(nvoxels):
         corrs[i] = np.corrcoef(got[i], exp[i])[0, 1]
 
-    assert corrs.min() > 0.99
+    assert corrs.min() > corr
 
 
 def crop(data, params):
