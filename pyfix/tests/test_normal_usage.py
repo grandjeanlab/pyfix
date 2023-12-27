@@ -38,16 +38,16 @@ def main(cmd=''):
     return fix.main(shlex.split(cmd))
 
 
-def compare_arrays(got, exp):
+def compare_arrays(got, exp, err=0.01):
     exprange = exp.max() - exp.min()
     maxerr   = np.abs(got - exp).max() / exprange
-    return maxerr
+    assert maxerr < err
 
 
 def compare_4D_data(got, exp, err=0.01, corr=0.99):
 
     assert np.all(got.shape == exp.shape)
-    assert compare_arrays(got, exp) < err
+    compare_arrays(got, exp, err)
 
     got      = got.reshape(-1, got.shape[3])
     exp      = exp.reshape(-1, exp.shape[3])
@@ -95,18 +95,15 @@ def test_feature_extraction():
             if np.all(np.isclose(gotcol, expcol)):
                 continue
 
-            maxerr = compare_arrays(gotcol, expcol)
-            corr   = gotcol.corr(expcol)
-
-            assert corr > 0.99
-
             # fftfinerwrtnull generates a random null
             # distribution, so results are expected to
             # differ
-            if col.startswith('fftfinerwrtnull'):
-                assert maxerr < 0.10
-            else:
-                assert maxerr < 0.01
+            if col.startswith('fftfinerwrtnull'): err = 0.10
+            else:                                 err = 0.01
+
+            compare_arrays(gotcol, expcol, err)
+            corr = gotcol.corr(expcol)
+            assert corr > 0.99
 
 
 def test_train():
@@ -166,7 +163,7 @@ def test_cleanup():
       - fix -a labels.txt mel.ica -A
     """
 
-    flag_variants = ['', '-m', '-A']
+    flag_variants = ['', '-m', '-A', '-m -h 10']
 
     for flags in flag_variants:
         with tempdir():
@@ -178,12 +175,16 @@ def test_cleanup():
 
             main(f'-a {labelfile} {flags}')
 
-            got      = meldir.input_tree.get('filtered_func_data_clean')
-            gotvn    = meldir.input_tree.get('filtered_func_data_clean_vn')
-            cleandir = ('clean' + ' ' + flags).strip()
-            cleandir = cleandir.replace(' ', '_')
-            exp   = op.join(cleandir, op.basename(got))
-            expvn = op.join(cleandir, op.basename(gotvn))
+            got        = meldir.input_tree.get('filtered_func_data_clean')
+            gotvn      = meldir.input_tree.get('filtered_func_data_clean_vn')
+            gotmot     = meldir.input_tree.get('motion_parameters_nifti')
+            gotmotfilt = meldir.input_tree.get('motion_parameters_filtered')
+            cleandir   = ('clean' + ' ' + flags).strip()
+            cleandir   = cleandir.replace(' ', '_')
+            exp        = op.join(cleandir, op.basename(got))
+            expvn      = op.join(cleandir, op.basename(gotvn))
+            expmot     = op.join(cleandir, op.basename(gotmot))
+            expmotfilt = op.join(cleandir, op.basename(gotmotfilt))
 
             got   = Image(got).data
             exp   = Image(exp).data
@@ -195,7 +196,17 @@ def test_cleanup():
             gotvn     = crop(gotvn, roiparams)
 
             assert np.all(gotvn.shape == expvn.shape)
+            compare_arrays(gotvn, expvn)
             compare_4D_data(got, exp)
+
+            if op.exists(expmot):
+                gotmot = Image(gotmot).data
+                expmot = Image(expmot).data
+                compare_4D_data(gotmot, expmot)
+            if op.exists(expmotfilt):
+                gotmotfilt = Image(gotmotfilt).data
+                expmotfilt = Image(expmotfilt).data
+                compare_4D_data(gotmotfilt, expmotfilt)
 
 
 def test_full_run():
