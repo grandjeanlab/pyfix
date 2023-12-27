@@ -26,6 +26,7 @@ reg
   veins_exf.nii.gz                               (veins_exf)
 mc
   prefiltered_func_data_mcf.par                  (motion_params)
+  prefiltered_func_data_mcf_conf.nii.gz          (motion_params_nifti)
   prefiltered_func_data_mcf_conf_hp.nii.gz       (motion_params_filtered)
   prefiltered_func_data_mcf_conf_hp_clean.nii.gz (motion_params_cleaned)
 fix                                              (fixdir)

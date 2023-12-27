@@ -268,18 +268,30 @@ def expand_motion_parameters(motion_parameters):
     return conf0
 
 
-@ft.lru_cache
-def motion_confounds(motion_parameters, tr, temporal_fwhm=None):
 
-    # load, expand, filter (if req'd), and return
-    mp = load_motion_parameters(motion_parameters)
-    conf = expand_motion_parameters(mp)
+def motion_confounds(motion_parameters, tr, temporal_fwhm=None, retall=False):
 
-    # filter motion parameters if required
-    if temporal_fwhm is not None:
-        conf = highpass_filter(conf, temporal_fwhm, tr)
+    @ft.lru_cache
+    def _motion_confounds(motion_parameters, tr, temporal_fwhm):
 
-    return _normalise(conf)
+        # load, expand, filter (if req'd), and return
+        mp   = load_motion_parameters(motion_parameters)
+        conf = expand_motion_parameters(mp)
+
+        # filter motion parameters if required
+        if temporal_fwhm is not None:
+            filtered   = highpass_filter(conf, temporal_fwhm, tr)
+            normalised = _normalise(filtered)
+        else:
+            filtered   = None
+            normalised = _normalise(conf)
+        return conf, filtered, normalised
+
+    conf, filtered, normalised = _motion_confounds(
+        motion_parameters, tr, temporal_fwhm)
+
+    if retall: return conf, filtered, normalised
+    else:      return normalised
 
 
 # TODO: move varnorm and motparams_clean to separate functions outside apply
@@ -295,6 +307,8 @@ def apply(func_fname,
           highpass=None,
           aggressive=False,
           varnorm_fname=None,
+          motparams_nifti_fname=None,
+          motparams_filt_fname=None,
           motparams_clean_fname=None
           ):
     log.debug(locals())
@@ -304,9 +318,6 @@ def apply(func_fname,
 
     if do_motion_regression and (motion_parameters is None):
         raise RuntimeError('motion parameters are required if do_motion_regression=True')
-
-    if (motparams_clean_fname is not None) and (motion_parameters is None):
-        raise RuntimeError('motion_parameters required to calculate cleaned-motion-parameters')
 
     # load funcname
     func = nb.load(func_fname)
@@ -329,17 +340,23 @@ def apply(func_fname,
 
     # read and filter motion confounds (if req'func_d)
     if do_motion_regression:
-        conf = motion_confounds(
+        raw, filt, motparams = motion_confounds(
             motion_parameters=motion_parameters,
             tr=func_tr,
-            temporal_fwhm=highpass)
+            temporal_fwhm=highpass,
+            retall=True)
+        # save raw/expanded, and HP filtered, motion parameters
+        if motparams_nifti_fname is not None:
+            create_dummy_nifti(raw, tr=func_tr, fname=motparams_nifti_fname)
+        if motparams_filt_fname is not None and highpass is not None:
+            create_dummy_nifti(filt, tr=func_tr, fname=motparams_filt_fname)
 
     # beta for ICA (good *and* bad)
 
     if aggressive:
         if do_motion_regression:
             log.info(f'Concat motion parameters with ICA')
-            conf = np.concatenate((conf, ica[:, noise_idx]), axis=1)
+            conf = np.concatenate((motparams, ica[:, noise_idx]), axis=1)
             log.info(f'Regress noise ICA components and motion parameters from functional data (aggressive)')
         else:
             conf = ica
@@ -352,7 +369,7 @@ def apply(func_fname,
         if do_motion_regression:
             #  regress out motion parameters from ICA and data (aggressively)
             log.info(f'Regress motion parameters from ICA and functional data')
-
+            conf = motparams
             ica = ica - (conf @ (pinv(conf, 1e-6) @ ica))
             func_d = func_d - (conf @ (pinv(conf, 1e-6) @ func_d))
 
@@ -378,7 +395,6 @@ def apply(func_fname,
         func_d = np.std(func_d, ddof=1, axis=0, keepdims=True)
 
         save_image(func, func_d, mask=func_mask, fname=varnorm_fname)
-
 
     # compute movement regressors with noise components removed
 

@@ -309,6 +309,8 @@ def run_apply(labels     : str,
     icamix                  = ftree.get('melodic_mix')
 
     motion_parameters       = ftree.get('motion_params')
+    motion_parameters_nifti = ftree.get('motion_params_nifti')
+    motion_parameters_filt  = ftree.get('motion_params_filtered')
     motion_parameters_clean = ftree.get('motion_params_cleaned')
 
     ddremove = legacy.read_labels(labels)
@@ -319,7 +321,6 @@ def run_apply(labels     : str,
     fsf = ftree.get('design')
     if (highpass is None) and op.exists(fsf):
         fsf = featanalysis.loadFsf(fsf)
-
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
 
@@ -332,8 +333,11 @@ def run_apply(labels     : str,
         do_motion_regression=motion,
         motion_parameters=motion_parameters,
         func_tr=tr,
+        highpass=highpass,
         aggressive=aggressive,
         varnorm_fname=nifti_clean_varnorm,
+        motparams_nifti_fname=motion_parameters_nifti,
+        motparams_filt_fname=motion_parameters_filt,
         motparams_clean_fname=motion_parameters_clean,
     )
 
@@ -373,6 +377,7 @@ def setup_logging(logfile):
     logging.captureWarnings(True)
 
     hd  = logging.FileHandler(logfile)
+
     fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
                             '%(levelname)s : %(message)s')
     hd.setFormatter(fmt)
@@ -469,7 +474,7 @@ def main(argv=None):
     apply_parser.add_argument('meldir', metavar='<mel.ica>', nargs='?')
     apply_parser.add_argument('-m', '--motion', action='store_true')
     apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
-                              type=float, default=-1)
+                              type=float)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
 
