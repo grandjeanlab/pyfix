@@ -44,4 +44,4 @@ test:
     - when: never
 
   script:
-    - bash .ci/unit_tests.sh
+    - bash .ci/unit_test.sh
