@@ -177,8 +177,8 @@ def test_cleanup():
 
             got        = meldir.input_tree.get('filtered_func_data_clean')
             gotvn      = meldir.input_tree.get('filtered_func_data_clean_vn')
-            gotmot     = meldir.input_tree.get('motion_parameters_nifti')
-            gotmotfilt = meldir.input_tree.get('motion_parameters_filtered')
+            gotmot     = meldir.input_tree.get('motion_params_nifti')
+            gotmotfilt = meldir.input_tree.get('motion_params_filtered')
             cleandir   = ('clean' + ' ' + flags).strip()
             cleandir   = cleandir.replace(' ', '_')
             exp        = op.join(cleandir, op.basename(got))
