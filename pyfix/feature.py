@@ -4,7 +4,6 @@ import itertools
 import logging
 import os
 import os.path as op
-from functools import lru_cache
 from typing import List
 
 import nibabel as nb
@@ -449,7 +448,7 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
     return feat
 
 
-@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', ic_idx))
+@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', data.fixdir, ic_idx))
 def _get_abs_ic_filename(data, ic_idx):
 
     fname = data.fix_tree.update(ic_idx=ic_idx).get('icmap_abs')
@@ -465,7 +464,7 @@ def _get_abs_ic_filename(data, ic_idx):
     return fname
 
 
-@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', id(data), ic_idx))
+@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', data.fixdir, ic_idx))
 def _get_ic_filename(data, ic_idx):
 
     filename = data.fix_tree.update(ic_idx=ic_idx).get('icmap')
@@ -476,12 +475,12 @@ def _get_ic_filename(data, ic_idx):
     return filename
 
 
-@cached(cache={}, key=lambda d: hashkey('_get_data_tmean_filename', id(d)))
-def _get_data_tmean_filename(d):
+@cached(cache={}, key=lambda data: hashkey('_get_data_tmean_filename', data.fixdir))
+def _get_data_tmean_filename(data):
 
-    filename = d.fix_tree.get('tmean')
+    filename = data.fix_tree.get('tmean')
 
-    d0 = d.input.data
+    d0 = data.input.data
 
     nb.Nifti1Image(
         np.mean(d0.get_fdata(), axis=-1),
@@ -631,7 +630,7 @@ def _extract_tissue_timeseries(func, dseg):
     return ts_csf, ts_gm, ts_wm
 
 
-@lru_cache()
+@cached(cache={})
 def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
     if xfm.endswith('.mat'):
         log.debug(f'Apply transform: affine')
@@ -657,21 +656,21 @@ def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
     return nb.load(out_name)
 
 
-@cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', id(data)))
+@cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', data.fixdir))
 def _get_dseg_filename(data):
     dseg = data.fix_tree.get('dseg')
     data.spatialmaps['dseg'].data.to_filename(dseg)
     return dseg
 
 
-@cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', id(data)))
+@cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', data.fixdir))
 def _get_brainmask_filename(data):
     d = data.fix_tree.get('brainmask')
     data.spatialmaps['brainmask'].data.to_filename(d)
     return d
 
 
-@cached(cache={}, key=lambda data, map_key: hashkey(map_key, id(data)))
+@cached(cache={}, key=lambda data, map_key: hashkey(map_key, data.fixdir))
 def _get_map_with_tempname(data, map_key):
     fname = data.fix_tree.get(map_key)
     d = data.spatialmaps[map_key].data
@@ -813,33 +812,28 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
 
 
 
+# create edge masks if not already created
+@cached(cache={}, key=lambda data, func_brain_mask: hashkey('_create_edge_masks', data.fixdir, func_brain_mask))
 def _create_edge_masks(data, func_brain_mask):
 
-    # create edge masks if not already created
-    # load edge masks
-    @lru_cache(maxsize=None)
-    def create_edge_masks(func_brain_mask):
+    log.info('Creating edge masks')
 
-        log.info('Creating edge masks')
+    # create edge masks in native functional space
+    # from the func brain mask
+    mask       = func_brain_mask
+    ero_masks  = [mask]
+    edge_masks = []
 
-        # create edge masks in native functional space
-        # from the func brain mask
-        mask       = func_brain_mask
-        ero_masks  = [mask]
-        edge_masks = []
+    for i in range(5):
+        tree = data.fix_tree.update(ero=(i + 1))
+        ero_masks .append(tree.get('ero_mask'))
+        edge_masks.append(tree.get('edge_mask'))
 
-        for i in range(5):
-            tree = data.fix_tree.update(ero=(i + 1))
-            ero_masks .append(tree.get('ero_mask'))
-            edge_masks.append(tree.get('edge_mask'))
+    for i in range(5):
+        fslmaths(ero_masks[i]).eroF().run(ero_masks[i + 1])
+        fslmaths(mask).sub(ero_masks[i + 1]).run(edge_masks[i])
 
-        for i in range(5):
-            fslmaths(ero_masks[i]).eroF().run(ero_masks[i + 1])
-            fslmaths(mask).sub(ero_masks[i + 1]).run(edge_masks[i])
-
-        return [nb.load(m) for m in edge_masks]
-
-    return create_edge_masks(func_brain_mask)
+    return [nb.load(m) for m in edge_masks]
 
 
 @feature_extractor
@@ -874,7 +868,7 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@cached(cache={}, key=lambda *a, **kwa: hashkey('_create_sag_masks'))
+@cached(cache={}, key=lambda *a, **kwa: hashkey('_create_sag_masks', data.fixdir))
 def _create_sag_masks(data,
                       func: nb.Nifti1Image,
                       standard2func_tx: nb.Nifti1Image,
@@ -883,7 +877,6 @@ def _create_sag_masks(data,
                       veins_exf: nb.Nifti1Image = None) -> List[str]:
 
     log.info('Creating sagittal masks')
-
 
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
