@@ -1,7 +1,7 @@
 The pyfix test data is taken from a couple of different sources:
 
   - rest.ica.zip contains a MELODIC analysis performed on the "nice" data set
-    from the FMRI 3 practical.
+    from the FSL Course FMRI 3 practical.
   - rest.ica.fixdir.zip contains the fix/ directory from running the original
     (MATLAB/R) version of FIX on rest.ica.zip
   - training_data.zip contains features.csv and hand_labels_noise.txt files,
