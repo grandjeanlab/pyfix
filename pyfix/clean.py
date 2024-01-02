@@ -359,10 +359,10 @@ def apply(func_fname,
             conf = np.concatenate((motparams, ica[:, noise_idx]), axis=1)
             log.info(f'Regress noise ICA components and motion parameters from functional data (aggressive)')
         else:
-            conf = ica
+            conf = ica[:, noise_idx]
             log.info(f'Regress noise ICA components from functional data (aggressive)')
 
-        func_d = func_d - (conf @ (np.linalg.pinv(conf, 1e-6) @ func_d))  # cleanup
+        func_d = func_d - (conf @ (pinv(conf, 1e-6) @ func_d))  # cleanup
 
     else:
 
