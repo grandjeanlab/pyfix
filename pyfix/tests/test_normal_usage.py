@@ -163,7 +163,7 @@ def test_cleanup():
       - fix -a labels.txt mel.ica -A
     """
 
-    flag_variants = ['', '-m', '-A', '-m -h 10']
+    flag_variants = ['', '-m', '-A', '-m -h 10' , '-m -A']
 
     for flags in flag_variants:
         with tempdir():
