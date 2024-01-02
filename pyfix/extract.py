@@ -246,7 +246,6 @@ class FixData:
         ic_timeseries = np.loadtxt(intree.get('melodic_mix'))
         ic_map = nb.load(intree.get('melodic_IC'))
 
-        struct_fast_seg = intree.get('highres_pveseg')
         struct_fs_wmparc = intree.get('wmparc')
 
         struct = nb.load(intree.get('highres'))
@@ -254,12 +253,17 @@ class FixData:
 
         veins_exf = intree.get('veins_exf')
 
-        #  structural segmentations
+        # structural segmentations - may
+        # exist in input dir or in fix dir
+        struct_fast_seg = intree.get('highres_pveseg')
+        if not op.exists(struct_fast_seg):
+            struct_fast_seg = fixtree.get('fastsg')
+
         if not op.exists(struct_fast_seg):
             log.info('Creating structural segmentation with FSL FAST')
-            struct_fast_seg = fixtree.get('fastsg')
-            fast_prefix     = fixtree.placeholders['fast_basename']
-            fast_prefix     = op.join(op.dirname(struct_fast_seg), fast_prefix)
+
+            fast_prefix = fixtree.placeholders['fast_basename']
+            fast_prefix = op.join(op.dirname(struct_fast_seg), fast_prefix)
 
             fast(struct.get_filename(), fast_prefix, t=1)
 
