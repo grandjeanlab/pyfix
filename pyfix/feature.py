@@ -868,7 +868,7 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@cached(cache={}, key=lambda *a, **kwa: hashkey('_create_sag_masks', data.fixdir))
+@cached(cache={}, key=lambda data, *a, **kwa: hashkey('_create_sag_masks', data.fixdir))
 def _create_sag_masks(data,
                       func: nb.Nifti1Image,
                       standard2func_tx: nb.Nifti1Image,
