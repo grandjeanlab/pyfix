@@ -125,7 +125,9 @@ class InputDirectory:
         if fix_dir is None:
             fix_dir = input_tree.get('fixdir')
 
-        fix_tree = FileTree.read(fix_tree, fix_dir)
+        fix_tree  = FileTree.read(fix_tree, fix_dir)
+        input_dir = op.abspath(input_dir)
+        fix_dir   = op.abspath(fix_dir)
 
         return InputDirectory(input_dir, fix_dir, input_tree, fix_tree)
 
