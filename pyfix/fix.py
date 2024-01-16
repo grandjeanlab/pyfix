@@ -4,8 +4,6 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 """
 
 import argparse
-import importlib
-import itertools as it
 import logging
 import multiprocessing as mp
 import os
@@ -17,15 +15,11 @@ from collections import defaultdict
 from typing import List
 
 import nibabel as nb
-import numpy as np
-
-from file_tree import FileTree
 
 from fsl.data import fixlabels
-from fsl.data import melodicanalysis, featanalysis, melodicimage
+from fsl.data import melodicanalysis, featanalysis
 
 from pyfix import (extract,
-                   feature,
                    legacy,
                    io,
                    classify,
@@ -242,7 +236,7 @@ def run_classify(meldir     : str,
         threshold = saved_threshold
     if threshold is None:
         raise RuntimeError('You must specify a probability threshold - '
-                           f'{args.model} does not contain an optimal '
+                           f'{model} does not contain an optimal '
                            'threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)

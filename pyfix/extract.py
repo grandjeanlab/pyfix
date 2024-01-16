@@ -305,10 +305,11 @@ class FixData:
 
         # motion parameters
         mp = None
-        for fname in (intree.get('motion_params'),
-                      intree.get('motion_params_filtered')):
+        for fname in (intree.get('motion_params_filtered'),
+                      intree.get('motion_params')):
             if op.exists(fname):
                 mp = fname
+                break
 
         # filter, and normalise motion confounds, as required
         if mp is not None:

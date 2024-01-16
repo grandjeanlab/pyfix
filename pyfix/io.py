@@ -174,7 +174,7 @@ def load_motion_parameters(fname):
         log.info('Looks like BIDS motion parameter file (*_motion.tsv)')
         mp = pd.read_csv(fname, delimiter='\t', index_col=None)
 
-    elif fname.endswith('.eddy_parameters '):
+    elif fname.endswith('.eddy_parameters'):
 
         log.info('Looks like EDDY motion parameter file (*.eddy_parameters)')
         mp = np.loadtxt(fname)
