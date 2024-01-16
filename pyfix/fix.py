@@ -370,13 +370,13 @@ def setup_logging(logfile):
     # module get directed to the log
     logging.captureWarnings(True)
 
-    hd  = logging.FileHandler(logfile)
-
-    fmt = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
-                            '%(levelname)s : %(message)s')
+    logger = logging.getLogger('pyfix')
+    hd     = logging.FileHandler(logfile)
+    fmt    = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
+                                   '%(levelname)s : %(message)s')
     hd.setFormatter(fmt)
-    log.addHandler(hd)
-    log.setLevel(logging.DEBUG)
+    logger.addHandler(hd)
+    logger.setLevel(logging.DEBUG)
 
     # make libxgboost (compiled library) quiet
     xgboost = weak_import('xgboost')
