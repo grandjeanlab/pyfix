@@ -304,12 +304,9 @@ class FixData:
                 highpass_fwhm = float(fsf['paradigm_hp'])
 
         # motion parameters
-        mp = None
-        for fname in (intree.get('motion_params_filtered'),
-                      intree.get('motion_params')):
-            if op.exists(fname):
-                mp = fname
-                break
+        mp = intree.get('motion_params')
+        if not op.exists(mp):
+            mp = None
 
         # filter, and normalise motion confounds, as required
         if mp is not None:
