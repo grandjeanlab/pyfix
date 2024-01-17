@@ -13,7 +13,7 @@ authors         = [{name = "Sean Fitzgibbon", email = "sean.fitzgibbon@ndcn.ox.a
 dependencies    = [
   "cachetools",
   "file_tree",
-  "fslpy >=3.16",
+  "fslpy >=3.16.1",
   "jinja2",
   "joblib",
   "matplotlib",
