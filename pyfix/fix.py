@@ -4,6 +4,9 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 """
 
 import argparse
+import calendar
+import datetime
+import functools as ft
 import logging
 import multiprocessing as mp
 import os
@@ -18,6 +21,7 @@ import nibabel as nb
 
 from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis
+from fsl.wrappers import wrapperconfig
 
 from pyfix import (extract,
                    legacy,
@@ -372,8 +376,12 @@ def setup_logging(logfile):
 
     logger = logging.getLogger('pyfix')
     hd     = logging.FileHandler(logfile)
-    fmt    = logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] '
-                                   '%(levelname)s : %(message)s')
+    fmt    = logging.Formatter('%(asctime)s '
+                               '%(levelname)8.8s '
+                               '%(filename)15.15s '
+                               '%(lineno)4d: '
+                               '%(message)s',
+                               '%H:%M:%S')
     hd.setFormatter(fmt)
     logger.addHandler(hd)
     logger.setLevel(logging.DEBUG)
@@ -471,7 +479,6 @@ def main(argv=None):
                               type=float)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
-
     if argv is None:
         argv = sys.argv[1:]
 
@@ -499,11 +506,29 @@ def main(argv=None):
 
     parser, runfunc = switches[switch]
     args            = parser.parse_args(argv)
+    date            = datetime.date.today()
 
     setup_logging(args.logfile)
-    log.info('Pyfix command: %s', ' '.join(argv))
 
-    runfunc(**vars(args))
+    log.info('pyfix %s', __version__)
+    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
+    log.info('pwd: %s', os.getcwd())
+    log.info('command-line arguments: %s', ' '.join(argv))
+
+    # Configure fsl.wrappers so that called
+    # commands and all standard output/error
+    # are logged to the pyfix log.
+    def logoutput(what, output):
+        output = output.strip()
+        if output != '':
+            log.debug('%s: %s', what, output)
+
+    with wrapperconfig(log={
+            'tee'    : False,
+            'cmd'    : ft.partial(logoutput, 'Calling command'),
+            'stdout' : ft.partial(logoutput, 'Standard output'),
+            'stderr' : ft.partial(logoutput, 'Standard error')}):
+        runfunc(**vars(args))
 
 
 if __name__ == '__main__':
