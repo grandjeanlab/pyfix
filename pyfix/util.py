@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
+import glob
 import logging
 import os.path as op
 
-from typing import Tuple
+from typing import List, Tuple
 
 import nibabel as nb
 import numpy as np
@@ -34,6 +35,19 @@ def get_resource(name) -> str:
     r = op.join(get_resource_path(), name)
     assert_file_exists(r)
     return r
+
+
+def list_models() -> List[str]:
+    modeldir   = op.join(get_resource_path(), 'models')
+    modelfiles = glob.glob(op.join(modeldir, '*.pyfix_model'))
+    modelfiles = [op.splitext(op.basename(f))[0] for f in modelfiles]
+    return sorted(modelfiles)
+
+
+def get_model_file(name) -> str:
+    f = op.join(get_resource_path(), 'models', f'{name}.pyfix_model')
+    assert_file_exists(f)
+    return f
 
 
 def create_mask(dseg: str,

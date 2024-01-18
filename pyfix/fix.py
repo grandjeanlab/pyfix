@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 FIX (FMRIB's ICA-based Xnoiseifier).
 """
@@ -23,14 +24,17 @@ from fsl.data import fixlabels
 from fsl.data import melodicanalysis, featanalysis
 from fsl.wrappers import wrapperconfig
 
-from pyfix import (extract,
-                   legacy,
-                   io,
-                   classify,
-                   clean,
-                   report,
-                   __version__)
-from pyfix.util import weak_import, get_resource
+from pyfix      import (extract,
+                        legacy,
+                        io,
+                        classify,
+                        clean,
+                        report,
+                        __version__)
+from pyfix.util import (weak_import,
+                        get_resource,
+                        get_model_file,
+                        list_models)
 
 
 log = logging.getLogger(__name__)
@@ -102,7 +106,9 @@ Usage for each stage separately, including creation of training data:
 
     -A             apply aggressive (full variance) cleanup, instead of the
                    default less-aggressive (unique variance) cleanup.
-'''
+
+The following built-in models can be used for classification:
+''' + '\n'.join(f' - {m}' for m in list_models())
 
 def assert_is_melodic_dir(meldir):
 
@@ -163,8 +169,6 @@ def run_train(meldir      : List[str],
               tune        : bool = False,
               n_jobs      : int  = None,
               n_trials    : int  = None,
-              input_tree  : str  = None,
-              fix_tree    : str  = None,
               **kwargs):
 
     if tune:
@@ -507,6 +511,11 @@ def main(argv=None):
     parser, runfunc = switches[switch]
     args            = parser.parse_args(argv)
     date            = datetime.date.today()
+
+    # allow built-in models
+    # to be selected by name
+    if hasattr(args, 'model') and not op.exists(args.model):
+        args.model = get_model_file(args.model)
 
     setup_logging(args.logfile)
 
