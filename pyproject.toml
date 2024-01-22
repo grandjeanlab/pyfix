@@ -43,7 +43,7 @@ include = ["pyfix*"]
 exclude = ["examples"]
 
 [tool.setuptools.package-data]
-pyfix = ["VERSION", "resources/*", "resources/masks/*", "examples/*"]
+pyfix = ["VERSION", "resources/*", "resources/masks/*", "resources/models/*", "examples/*"]
 
 [tool.setuptools.dynamic]
 version = {file = "pyfix/VERSION"}
