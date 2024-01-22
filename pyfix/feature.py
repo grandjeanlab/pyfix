@@ -937,7 +937,7 @@ def _create_sag_masks(data,
 
     for r in range(start, sag_masks.shape[0]):
         for c, dlabel in enumerate(('', 'dil', 'dil2')):
-            in_name  = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
+            in_name  = util.get_mask(f'sag_mask{r}{dlabel}', data.species)
             out_name = data.fix_tree.get(f'std1mm2exfunc{r}{dlabel}')
 
             sag_masks[r, c] = _apply_xfm(

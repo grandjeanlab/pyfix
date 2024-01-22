@@ -1,0 +1,24 @@
+{
+    "Standard" : {
+        "file" : "Standard.pyfix_model"
+    },
+    "UKBiobank" : {
+        "file" : "UKBiobank.pyfix_model"
+    },
+    "WhII_Standard" : {
+        "file" : "WhII_Standard.pyfix_model"
+    },
+    "WhII_MB6" : {
+        "file" : "WhII_MB6.pyfix_model"
+    },
+    "HCP25_hp2000" : {
+        "file" : "HCP25_hp2000.pyfix_model"
+    },
+    "HCP7T_hp2000" : {
+        "file" : "HCP7T_hp2000.pyfix_model"
+    },
+    "Macaque" : {
+        "file"    : "___TODO__NCPHCP_Macaque.pyfix_model",
+        "species" : "Macaque"
+    }
+}

@@ -108,13 +108,15 @@ class InputDirectory:
     fixdir     : str
     input_tree : FileTree
     fix_tree   : FileTree
+    species    : str
 
     @staticmethod
     def from_input_dir(
             input_dir  : str,
             input_tree : str = None,
             fix_tree   : str = None,
-            fix_dir    : str = None
+            fix_dir    : str = None,
+            species    : str = None
     ) -> InputDirectory:
 
         if input_tree is None: input_tree = get_resource('melodic.tree')
@@ -129,7 +131,7 @@ class InputDirectory:
         input_dir = op.abspath(input_dir)
         fix_dir   = op.abspath(fix_dir)
 
-        return InputDirectory(input_dir, fix_dir, input_tree, fix_tree)
+        return InputDirectory(input_dir, fix_dir, input_tree, fix_tree, species)
 
 
     @property

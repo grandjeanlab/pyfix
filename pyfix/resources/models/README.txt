@@ -4,6 +4,9 @@ This directory contains a collection of pre-trained pyfix models. These models
 can be used for automatic classification of ICs for datasets which have similar
 properties (e.g. resolution, TR, spatial smoothing, etc).
 
+The info.json file contains an index of all built in models, along with some
+associated settings.
+
  - Standard.pyfix_model: for use on more "standard" FMRI datasets / analyses;
    e.g., TR=3s, Resolution=3.5x3.5x3.5mm, Session=6mins, default FEAT
    preprocessing (including default spatial smoothing).

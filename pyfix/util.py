@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 import glob
+import json
 import logging
+import os
 import os.path as op
 
 from typing import List, Tuple
@@ -44,10 +46,17 @@ def list_models() -> List[str]:
     return sorted(modelfiles)
 
 
-def get_model_file(name) -> str:
-    f = op.join(get_resource_path(), 'models', f'{name}.pyfix_model')
-    assert_file_exists(f)
-    return f
+def get_mask(name : str, species : str = None) -> str:
+    if species is None:
+        species = ''
+    return op.join(get_resource_path(), 'masks', species, name)
+
+
+def load_builtin_model(name : str) -> dict:
+    info = op.join(get_resource_path(), 'models', 'info.json')
+    with open(info, 'rt') as f:
+        info = json.loads(f.read())
+    return info[name]
 
 
 def create_mask(dseg: str,

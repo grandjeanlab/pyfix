@@ -33,7 +33,7 @@ from pyfix      import (extract,
                         __version__)
 from pyfix.util import (weak_import,
                         get_resource,
-                        get_model_file,
+                        load_builtin_model,
                         list_models)
 
 
@@ -512,10 +512,13 @@ def main(argv=None):
     args            = parser.parse_args(argv)
     date            = datetime.date.today()
 
-    # allow built-in models
-    # to be selected by name
+    # allow built-in models to be selected by
+    # name, and auto-load associated settings
     if hasattr(args, 'model') and not op.exists(args.model):
-        args.model = get_model_file(args.model)
+        model      = load_builtin_model(model)
+        args.model = model['file']
+        if args.species is not None:
+            args.species = model.get('species')
 
     setup_logging(args.logfile)
 
