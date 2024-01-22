@@ -1,23 +1,44 @@
 #!/usr/bin/env python
+
 """
 FIX (FMRIB's ICA-based Xnoiseifier).
 """
 
 import argparse
-import importlib
-import itertools as it
+import calendar
+import datetime
+import functools as ft
 import logging
+import multiprocessing as mp
 import os
 import os.path as op
 import sys
+import warnings
+from collections import defaultdict
+
+from typing import List
 
 import nibabel as nb
-import numpy as np
 
 from fsl.data import fixlabels
-from fsl.data import melodicanalysis, featanalysis, melodicimage
+from fsl.data import melodicanalysis, featanalysis
+from fsl.wrappers import wrapperconfig
 
-from pyfix import extract, feature, legacy, io, classify, clean, __version__
+from pyfix      import (extract,
+                        legacy,
+                        io,
+                        classify,
+                        clean,
+                        report,
+                        __version__)
+from pyfix.util import (weak_import,
+                        get_resource,
+                        get_model_file,
+                        list_models)
+
+
+log = logging.getLogger(__name__)
+
 
 USAGE = f'''
 FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
@@ -44,13 +65,14 @@ Usage for each stage separately, including creation of training data:
   fix -f <mel.ica>
     Feature extraction (for later training and/or classifying).
 
-  fix -t <training-output-basename> [-l] <mel1.ica> <mel2.ica> ...
+  fix -t <training-output-basename> [-l] [-u] <mel1.ica> <mel2.ica> ...
 
     Train classifier (Training output basename followed by list of Melodic
     directories).  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
     -l : optional LOO accuracy testing.
+    -u : optional hyperparameter optimisation using Optuna (if installed).
 
   fix -c <mel.ica> <training.pyfix_model> <thresh>
     Classify ICA components.
@@ -62,10 +84,13 @@ Usage for each stage separately, including creation of training data:
     classifictions.  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
-  fix -a <mel.ica/fix4melview_TRAIN_thr.txt>  [-m] [-h <highpass>]  [-A]
+  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A]
 
     Apply cleanup, using artefacts listed in the .txt file, to the data inside
     the enclosing Feat/Melodic directory.
+
+    If <mel.ica> is not provided, it is assumed that <labels.txt> is contained
+    within <mel.ica>.
 
     -h -1          apply no highpass filtering.
     -h 0           apply linear detrending only.
@@ -81,10 +106,9 @@ Usage for each stage separately, including creation of training data:
 
     -A             apply aggressive (full variance) cleanup, instead of the
                    default less-aggressive (unique variance) cleanup.
-'''
 
-FIXDIR = 'fix'
-
+The following built-in models can be used for classification:
+''' + '\n'.join(f' - {m}' for m in list_models())
 
 def assert_is_melodic_dir(meldir):
 
@@ -115,65 +139,44 @@ def assert_has_hand_labels(meldir):
         raise RuntimeError(f'Missing hand labels: {meldir}/hand_labels_noise.txt')
 
 
-def create_model():
-    """Create the scikit learn classifier that is used for training and
-    classification. By default a RandomForestClassifier is created, but
-    this can be customised with environment variables.
-
-    The classifier class can be specified via the "PYFIX_MODEL" environment
-    variable, e.g.
-
-        PYFIX_MODEL="sklearn.ensemble.RandomForestClassifier"
-
-    Initialisation parameters can be set via "PYFIX_MODEL_<parameter>"
-    environment variables, e.g:
-
-        PYFIX_MODEL_n_estimators=100
-    """
-    model  = os.environ.get('PYFIX_MODEL', None)
-    params = {k : v for k, v in os.environ.items() if k.startswith('PYFIX_MODEL_')}
-    params = {k.lstrip('PYFIX_NODEL_') : v for k, v in params.items()}
-
-    if model is None and len(params) == 0:
-        model  = 'sklearn.ensemble.RandomForestClassifier'
-        params = {'n_estimators' : 50}
-    elif model is None:
-        model  = 'sklearn.ensemble.RandomForestClassifier'
-
-    mod, cls = model.rsplit('.', 1)
-    mod      = importlib.import_module(mod)
-    cls      = getattr(mod, cls)
-
-    return cls(**params)
-
-
-def run_feature_extraction(meldir):
+def run_feature_extraction(meldir     : str,
+                           input_tree : str = None,
+                           fix_tree   : str = None,
+                           outdir     : str = None,
+                           **kwargs):
 
     assert_is_melodic_dir(meldir)
 
-    logging.basicConfig(
-        filename=op.join(meldir, FIXDIR, 'fix.log'),
-        level=logging.INFO,
-    )
-
     # instantiate FixData object
-    d = extract.FixData.from_melodic_dir(
-        meldir,
-        fixdir=op.join(meldir, FIXDIR)
-    )
+    indir = io.InputDirectory.from_input_dir(
+        meldir, input_tree, fix_tree, outdir)
+    d     = extract.FixData.from_input_dir(indir)
 
     # extract legacy features
     f = extract.extract_features(
         data=d,
-        features=legacy.LEGACY_FEATURE_EXTRACTORS,
-    )
+        features=legacy.LEGACY_FEATURE_EXTRACTORS)
 
     # save features (pyfix and legacy-fix formats)
-    io.save_features(op.join(meldir, FIXDIR, 'features'), f)
-    legacy.save_features(op.join(meldir, FIXDIR), f)
+    f.to_csv(d.fix_tree.get('pyfix_features'), index=None)
+    legacy.save_features(d.fix_tree.get('legacy_features'), f)
 
 
-def run_train(basename, meldir, loo):
+def run_train(meldir      : List[str],
+              basename    : str,
+              model_class : str  = None,
+              loo         : bool = False,
+              tune        : bool = False,
+              n_jobs      : int  = None,
+              n_trials    : int  = None,
+              **kwargs):
+
+    if tune:
+        optuna = weak_import('optuna')
+        if optuna is None:
+            raise RuntimeError('You must install the optuna package in order '
+                               'to perform hyperparameter optimisation with '
+                               'the -u option')
 
     for d in meldir:
         assert_has_features(d)
@@ -187,104 +190,141 @@ def run_train(basename, meldir, loo):
     # read and collate all features into a training table
     training_data = classify.collate_features(file_table, legacy_features=True)
 
-    # TODO: save collated features
+    # Training with optional LOO cross validation
+    if not tune:
+        threshold = None
+        clf, loo = classify.train(training_data,
+                                  model_class,
+                                  loo=loo,
+                                  n_jobs=n_jobs)
 
-    # create classifier
-    model = create_model()
+    # training with automatic estimation
+    # of an optimal probability threshold
+    else:
+        clf, loo, threshold = classify.tuned_train(training_data,
+                                                   model_class,
+                                                   loo=loo,
+                                                   n_trials=n_trials,
+                                                   n_jobs=n_jobs)
 
-    # classify
-    clf, loo_result = classify.train(training_data, model=model, loo=loo)
-
-    if loo:
-        report = legacy.report_loo(loo_result.actual, loo_result.predicted_pb, loo_result.idx)
-        with open(basename+"_LOO_results", 'w') as f:
-            f.write(report)
+    if loo is not None:
+        report_text = report.report_loo(*loo)
+        with open(basename + "_LOO_results", 'w') as f:
+            f.write(report_text)
 
     # save model
-    io.save_model(basename, clf)
+    io.save_model(basename, clf, threshold)
 
 
-def run_classify(meldir, model, threshold):
+def run_classify(meldir     : str,
+                 model      : str,
+                 threshold  : int = None,
+                 input_tree : str = None,
+                 fix_tree   : str = None,
+                  **kwargs):
 
     assert_has_features(meldir)
 
-    fixdir = op.join(meldir, 'fix')
+    indir   = io.InputDirectory.from_input_dir(meldir,
+                                               input_tree,
+                                               fix_tree)
+    fixdir  = indir.fixdir
+    intree  = indir.input_tree
+    fixtree = indir.fix_tree
+
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    features0 = legacy.read_features(op.join(fixdir, 'features.csv'))
+    features0 = legacy.read_features(fixtree.get('legacy_features'))
 
-    clf = io.load_model(model)
-    ypb = classify.classify(features0, clf)[1]
+    clf, saved_threshold = io.load_model(model)
+    ypb                  = classify.classify(features0, clf)[1]
+
+    if threshold is None:
+        threshold = saved_threshold
+    if threshold is None:
+        raise RuntimeError('You must specify a probability threshold - '
+                           f'{model} does not contain an optimal '
+                           'threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
 
-    # TODO: move legacy label saving to legacy module
-    # invert y so that signal==False and noise==True (as per legacy fix4melview files)
-    y = ~y
-    labels = [['Noise'] if i else ['Signal'] for i in y]
-
-    label_file = legacy.generate_label_filename(meldir, model, threshold)
+    # Save generated labels to FIX label file.
+    # Invert y so that signal==False and noise==True
+    # (as per legacy fix4melview files)
+    y          = ~y
+    labels     = [['Noise'] if i else ['Signal'] for i in y]
+    modelname  = op.splitext(op.basename(model))[0]
+    label_file = intree \
+                   .update(threshold=threshold, model=modelname) \
+                   .get('fix_labels')
     fixlabels.saveLabelFile(labels, label_file, meldir)
 
     return label_file
 
 
-def run_evaluate(meldir, model, thresholds):
+def run_evaluate(meldir     : List[str],
+                 thresholds : List[int],
+                 model      : str,
+                 **kwargs):
 
-    if thresholds is not None:
-        thresholds = [int(t) for t in thresholds.split(',')]
-    else:
-        thresholds = [1, 2, 5, 10, 20, 30, 40, 50]
+    modelname = op.splitext(op.basename(model))[0]
 
     for md in meldir:
-        assert_has_hand_labels(md)
+        indir = io.InputDirectory.from_input_dir(md)
 
-    for md, threshold in it.product(meldir, thresholds):
-        label_file = legacy.generate_label_filename(md, model, threshold)
-        if not op.exists(label_file):
-            run_classify(md, model, threshold)
+        for threshold in thresholds:
 
-    print(legacy.report_evaluate(meldir, model, thresholds))
+            label_file = indir.input_tree \
+                .update(threshold=threshold, model=modelname) \
+                .get('fix_labels')
+            if not op.exists(label_file):
+                run_classify(md, model, threshold)
+
+    print(report.report_evaluate(meldir, model, thresholds))
 
 
-def run_apply(labels, motion, highpass, aggressive):
+def run_apply(labels     : str,
+              meldir     : str   = None,
+              highpass   : float = None,
+              motion     : bool  = False,
+              aggressive : bool  = True,
+              input_tree : str   = None,
+              fix_tree   : str   = None,
+              **kwargs):
 
-    meldir = op.dirname(labels)
-    assert_is_melodic_dir(meldir)
+    if meldir is None:
+        meldir = op.dirname(labels)
 
-    nifti_filt = op.join(meldir, 'filtered_func_data.nii.gz')
-    nifti_clean = op.join(meldir, 'filtered_func_data_clean.nii.gz')
-    nifti_clean_varnorm = op.join(meldir, 'filtered_func_data_clean_vn.nii.gz')
+    indir = io.InputDirectory.from_input_dir(meldir, input_tree, fix_tree)
+    ftree = indir.input_tree
 
-    cifti = op.join(meldir, 'Atlas.dtseries.nii')
-    cifti_filt = op.join(meldir, 'Atlas_hp_preclean.dtseries.nii')
-    cifti_clean = op.join(meldir, 'Atlas_clean.dtseries.nii')
-    cifti_clean_varnorm = op.join(meldir, 'Atlas_clean_vn.dscalar.nii')
+    nifti_filt              = ftree.get('filtered_func_data')
+    nifti_clean             = ftree.get('filtered_func_data_clean')
+    nifti_clean_varnorm     = ftree.get('filtered_func_data_clean_vn')
 
-    icamix = op.join(meldir, 'filtered_func_data.ica', 'melodic_mix')
+    cifti                   = ftree.get('cifti_dtseries')
+    cifti_filt              = ftree.get('cifti_preclean')
+    cifti_clean             = ftree.get('cifti_clean')
+    cifti_clean_varnorm     = ftree.get('cifti_clean_vn')
 
-    motion_parameters = op.join(meldir, 'mc/prefiltered_func_data_mcf.par')
-    motion_parameters_filt = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp.nii.gz')
-    motion_parameters_clean = op.join(meldir, 'mc/prefiltered_func_data_mcf_conf_hp_clean.nii.gz')
+    icamix                  = ftree.get('melodic_mix')
+
+    motion_parameters       = ftree.get('motion_params')
+    motion_parameters_nifti = ftree.get('motion_params_nifti')
+    motion_parameters_filt  = ftree.get('motion_params_filtered')
+    motion_parameters_clean = ftree.get('motion_params_cleaned')
 
     ddremove = legacy.read_labels(labels)
 
     tr = clean.get_tr(nifti_filt)
 
     # highpass settings (get from FSF is present and highpass not provided)
-
-    if (highpass is None) and featanalysis.isFEATDir(meldir):
-
-        fsf = featanalysis.loadSettings(meldir)
+    fsf = ftree.get('design')
+    if (highpass is None) and op.exists(fsf):
+        fsf = featanalysis.loadFsf(fsf)
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
-
-    # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
-    # create if they don't
-    if (not op.exists(motion_parameters_filt)) and op.exists(motion_parameters):
-        mp0 = clean.motion_confounds(motion_parameters, tr=tr, temporal_fwhm=highpass, tmpdir=meldir)
-        clean.create_dummy_nifti(mp0.astype(np.float32), tr=tr, fname=motion_parameters_filt)
 
     # clean filtered_func_data.nii.gz
     clean.apply(
@@ -293,10 +333,13 @@ def run_apply(labels, motion, highpass, aggressive):
         noise_idx=ddremove,
         func_clean_fname=nifti_clean,
         do_motion_regression=motion,
-        motion_parameters=motion_parameters_filt,
+        motion_parameters=motion_parameters,
         func_tr=tr,
+        highpass=highpass,
         aggressive=aggressive,
         varnorm_fname=nifti_clean_varnorm,
+        motparams_nifti_fname=motion_parameters_nifti,
+        motparams_filt_fname=motion_parameters_filt,
         motparams_clean_fname=motion_parameters_clean,
     )
 
@@ -306,7 +349,8 @@ def run_apply(labels, motion, highpass, aggressive):
         dd = nb.load(cifti)
         d0_tr = clean.get_tr(dd)
         d0, mask0 = clean.get_fdata(dd)
-        d0 = clean.highpass_filter(d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
+        d0 = clean.highpass_filter(
+            d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
         clean.save_image(dd, d0, mask0, fname=cifti_filt)
 
         clean.apply(
@@ -315,116 +359,185 @@ def run_apply(labels, motion, highpass, aggressive):
             noise_idx=ddremove,
             func_clean_fname=cifti_clean,
             do_motion_regression=motion,
-            motion_parameters=motion_parameters_filt,
+            motion_parameters=motion_parameters,
             func_tr=tr,
             aggressive=aggressive,
             varnorm_fname=cifti_clean_varnorm,
         )
 
 
-def run_main(meldir, model, threshold, motion, highpass, aggressive):
-
-    run_feature_extraction(meldir)
-    label_fname = run_classify(meldir, model, threshold)
-    run_apply(label_fname, motion, highpass, aggressive)
-
-
-def set_log_file(meldir, mode='a'):
-    log = logging.getLogger()
-
-    for hdlr in log.handlers[:]:  # remove all old handlers
-        log.removeHandler(hdlr)
-
-    fixdir = op.join(meldir, FIXDIR)
-
-    if not op.exists(fixdir):
-        os.makedirs(fixdir)
-
-    fileh = logging.FileHandler(
-        op.join(fixdir, 'fix.log'),
-        mode=mode,
-    )
-    fileh.setFormatter(logging.Formatter(fmt='[%(asctime)s - %(name)s.%(funcName)s ] %(levelname)s : %(message)s'))
-    log.addHandler(fileh)
+def run_main(**kwargs):
+    run_feature_extraction(**kwargs)
+    kwargs['labels'] = run_classify(**kwargs)
+    run_apply(**kwargs)
 
 
-def main():
+def setup_logging(logfile):
 
-    logging.basicConfig(
-        level=logging.INFO,
-    )
+    # Make warnings emitted via the warnings
+    # module get directed to the log
+    logging.captureWarnings(True)
+
+    logger = logging.getLogger('pyfix')
+    hd     = logging.FileHandler(logfile)
+    fmt    = logging.Formatter('%(asctime)s '
+                               '%(levelname)8.8s '
+                               '%(filename)15.15s '
+                               '%(lineno)4d: '
+                               '%(message)s',
+                               '%H:%M:%S')
+    hd.setFormatter(fmt)
+    logger.addHandler(hd)
+    logger.setLevel(logging.DEBUG)
+
+    # make libxgboost (compiled library) quiet
+    xgboost = weak_import('xgboost')
+    if xgboost is not None:
+        xgboost.set_config(verbosity=0)
+
+    # Tell optuna to use the root logger
+    optuna = weak_import('optuna')
+    if optuna is not None:
+        optuna.logging.enable_propagation()
+        optuna.logging.disable_default_handler()
+
+        # optuna emits optuna.exceptions.ExperimentalWarning
+        # regarding JournalStorage
+        warnings.filterwarnings(
+            'ignore', category=optuna.exceptions.ExperimentalWarning)
+
+    # xgboost emits UserWarning regarding unused parameters
+    warnings.filterwarnings('ignore', module='xgboost')
+
+
+def main(argv=None):
+
+    # options passed to all ArgumentParser objects
+    opts = {'add_help'     : False,
+            'allow_abbrev' : False}
+
+    # arguments accepted by all sub-parsers
+    shared_parser = argparse.ArgumentParser(**opts)
+    shared_parser.add_argument('-lf', '--logfile',
+                               default=op.join(os.getcwd(), 'pyfix.log'))
+    shared_parser.add_argument('-it', '--input_tree',
+                               default=get_resource('melodic.tree'))
+    shared_parser.add_argument('-ft', '--fix_tree',
+                               default=get_resource('pyfix.tree'))
+    shared_parser.add_argument('-nj', '--n_jobs', type=int,
+                               default=mp.cpu_count())
+
+    opts['parents'] = [shared_parser]
 
     # MAIN parser
-    main_parser = argparse.ArgumentParser(add_help=False)
+    main_parser = argparse.ArgumentParser(**opts)
     main_parser.add_argument('meldir', metavar='<mel.ica>')
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
-    main_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    main_parser.add_argument('threshold', metavar='<thresh>', type=int,
+                             nargs='?')
     main_parser.add_argument('-m', '--motion', action='store_true')
-    main_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
+    main_parser.add_argument('-h', '--highpass', metavar='<highpass>',
+                             type=float, default=-1.0)
     main_parser.add_argument('-A', '--aggressive', action='store_true')
 
     # FEATURE parser
-    feature_parser = argparse.ArgumentParser(add_help=False)
+    feature_parser = argparse.ArgumentParser(**opts)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
+    feature_parser.add_argument('-o', '--outdir')
 
     # TRAIN parser
-    train_parser = argparse.ArgumentParser(add_help=False)
-    train_parser.add_argument('basename', metavar='<training-output-basename>')
-    train_parser.add_argument('-l', '--loo', action='store_true')
+    train_parser = argparse.ArgumentParser(**opts)
+    train_parser.add_argument('basename',
+                              metavar='<training-output-basename>')
+    train_parser.add_argument('-l', '--loo',  action='store_true')
+    train_parser.add_argument('-u', '--tune', action='store_true')
+    train_parser.add_argument('-m', '--model_class')
+    train_parser.add_argument('-n', '--n_trials', type=int,
+                              default=100)
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
-    classify_parser = argparse.ArgumentParser(add_help=False)
+    classify_parser = argparse.ArgumentParser(**opts)
     classify_parser.add_argument('meldir', metavar='<mel.ica>')
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
-    classify_parser.add_argument('threshold', metavar='<thresh>', type=int)
+    classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
+                                 nargs='?')
 
     # EVALUATE parser
-    eval_parser = argparse.ArgumentParser(add_help=False)
+    def parse_thresholds(thresholds):
+        return [int(t) for t in thresholds.split(',')]
+
+    eval_parser = argparse.ArgumentParser(**opts)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
-    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...')
+    eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
+                             default='1,2,5,10,20,30,40,50',
+                             type=parse_thresholds)
 
     # APPLY parser
-    apply_parser = argparse.ArgumentParser(add_help=False)
-    apply_parser.add_argument('labels', metavar='<mel.ica/fix4melview_TRAIN_thr.txt>')
+    apply_parser = argparse.ArgumentParser(**opts)
+    apply_parser.add_argument('labels', metavar='<labelfile>')
+    apply_parser.add_argument('meldir', metavar='<mel.ica>', nargs='?')
     apply_parser.add_argument('-m', '--motion', action='store_true')
-    apply_parser.add_argument('-h', '--highpass', metavar='<highpass>', type=float, default=-1.0)
+    apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
+                              type=float)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
-    #  PARSE
+    if argv is None:
+        argv = sys.argv[1:]
 
-    if len(sys.argv) == 1:
+    if len(argv) == 0:
         print(USAGE)
-        sys.exit()
+        return
 
-    switch = sys.argv[1]
+    # all sub-commands except for main
+    # are selected with a switch
+    switch = argv[0]
+    if switch.startswith('-'):
+        argv = argv[1:]
 
-    if switch == '-f':
-        args = feature_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir, mode='w')
-        run_feature_extraction(**vars(args))
-    elif switch == '-h':
+    if switch == '-h':
         print(USAGE)
-        sys.exit()
-    elif switch == '-t':
-        args = train_parser.parse_args(sys.argv[2:])
-        run_train(**vars(args))
-    elif switch == '-c':
-        args = classify_parser.parse_args(sys.argv[2:])
-        set_log_file(args.meldir, mode='a')
-        run_classify(**vars(args))
-    elif switch == '-C':
-        args = eval_parser.parse_args(sys.argv[2:])
-        run_evaluate(**vars(args))
-    elif switch == '-a':
-        args = apply_parser.parse_args(sys.argv[2:])
-        set_log_file(op.dirname(args.labels), mode='a')
-        run_apply(**vars(args))
-    else:
-        args = main_parser.parse_args(sys.argv[1:])
-        set_log_file(args.meldir, mode='w')
-        run_main(**vars(args))
+        return
+
+    switches = defaultdict(
+        lambda: (main_parser,     run_main),
+        {'-f' : (feature_parser,  run_feature_extraction),
+         '-t' : (train_parser,    run_train),
+         '-c' : (classify_parser, run_classify),
+         '-C' : (eval_parser,     run_evaluate),
+         '-a' : (apply_parser,    run_apply)})
+
+    parser, runfunc = switches[switch]
+    args            = parser.parse_args(argv)
+    date            = datetime.date.today()
+
+    # allow built-in models
+    # to be selected by name
+    if hasattr(args, 'model') and not op.exists(args.model):
+        args.model = get_model_file(args.model)
+
+    setup_logging(args.logfile)
+
+    log.info('pyfix %s', __version__)
+    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
+    log.info('pwd: %s', os.getcwd())
+    log.info('command-line arguments: %s', ' '.join(argv))
+
+    # Configure fsl.wrappers so that called
+    # commands and all standard output/error
+    # are logged to the pyfix log.
+    def logoutput(what, output):
+        output = output.strip()
+        if output != '':
+            log.debug('%s: %s', what, output)
+
+    with wrapperconfig(log={
+            'tee'    : False,
+            'cmd'    : ft.partial(logoutput, 'Calling command'),
+            'stdout' : ft.partial(logoutput, 'Standard output'),
+            'stderr' : ft.partial(logoutput, 'Standard error')}):
+        runfunc(**vars(args))
 
 
 if __name__ == '__main__':

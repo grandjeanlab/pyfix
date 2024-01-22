@@ -1,0 +1,30 @@
+Pre-trained pyfix models
+
+This directory contains a collection of pre-trained pyfix models. These models
+can be used for automatic classification of ICs for datasets which have similar
+properties (e.g. resolution, TR, spatial smoothing, etc).
+
+ - Standard.pyfix_model: for use on more "standard" FMRI datasets / analyses;
+   e.g., TR=3s, Resolution=3.5x3.5x3.5mm, Session=6mins, default FEAT
+   preprocessing (including default spatial smoothing).
+
+ - HCP25_hp2000.pyfix_model: for use on "minimally-preprocessed" 3T HCP-like
+   datasets, e.g., TR=0.7s, Resolution=2x2x2mm, Session=15mins, no spatial
+   smoothing, minimal (2000s FWHM) highpass temporal filtering.
+
+ - HCP7T_hp2000.pyfix_model: for use on "minimally-preprocessed" 7T HCP-like
+   datasets, e.g., TR=1.0s, Resolution=1.6x1.6x1.6mm, Session=15mins, no
+   spatial smoothing, minimal (2000s FWHM) highpass temporal filtering.
+
+ - WhII_MB6.pyfix_model: derived from the Whitehall imaging study, using
+   multiband x6 EPI acceleration: TR=1.3s, Resolution=2x2x2mm, Session=10mins,
+   no spatial smoothing, 100s FWHM highpass temporal filtering.
+
+ - WhII_Standard.pyfix_model: derived from more traditional early parallel
+   scanning in the Whitehall imaging study, using no EPI acceleration: TR=3s,
+   Resolution=3x3x3mm, Session=10mins, no spatial smoothing, 100s FWHM
+   highpass temporal filtering.
+
+ - UKBiobank.pyfix_model: derived from fairly HCP-like scanning in the UK
+   Biobank imaging study: 40 subjects, TR=0.735s, Resolution=2.4x2.4x2.4mm,
+   Session=6mins, no spatial smoothing, 100s FWHM highpass temporal filtering.

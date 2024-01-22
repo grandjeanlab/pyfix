@@ -4,7 +4,6 @@ import itertools
 import logging
 import os
 import os.path as op
-from functools import lru_cache
 from typing import List
 
 import nibabel as nb
@@ -14,13 +13,16 @@ import scipy
 from cachetools import cached
 from cachetools.keys import hashkey
 from fsl.wrappers import (fslmaths,
+                          fslstats,
                           flirt,
                           applywarp,
                           applyxfm,
                           concatxfm,
+                          get_standard,
                           invxfm,
                           convertwarp,
-                          cluster)
+                          cluster,
+                          smoothest as smoothest_cmd)
 from sklearn import linear_model
 from spectrum import aryule
 
@@ -44,6 +46,9 @@ def feature_extractor(func):
     name = func.__name__
 
     def wrapper(*args, **kwargs):
+
+        log.debug('Running feature extractor %s', name)
+
         output = func(*args, **kwargs)
 
         if np.isscalar(output):
@@ -59,7 +64,7 @@ def feature_extractor(func):
 
         return output
 
-    log.debug('Registering function: {name}', name)
+    log.debug('Registering function: %s', name)
     FEATURE_EXTRACTORS[name] = wrapper
 
     return wrapper
@@ -82,11 +87,18 @@ def pixdim(data, ic_idx):
 
 @feature_extractor
 def arvswgn(data, ic_idx, norder=6):
-    ts = data.ica.get_timecourse(ic_idx)
+
+    ts   = data.ica.get_timecourse(ic_idx)
     mvec = np.zeros(norder)
+
     for i in range(norder):
         mvec[i] = aryule(ts, i + 1)[1]
-    return list(np.polyfit(np.arange(norder), mvec, 1))
+
+    x     = 1 + np.arange(norder)
+    coefs = np.polynomial.Polynomial.fit(x, mvec, 1)
+    coefs = reversed(coefs.convert().coef)
+
+    return list(coefs)
 
 
 @feature_extractor
@@ -105,7 +117,16 @@ def arfull(data, ic_idx, norder=(1, 2)):
 def entropy(data, ic_idx):
     ts = data.ica.get_timecourse(ic_idx)
 
-    bins = np.linspace(-2, 2, int(np.floor(np.sqrt(ts.shape[0]))))
+    # generate bin centres
+    centres = np.linspace(-2, 2, int(np.floor(np.sqrt(ts.shape[0]))))
+    length  = centres[1] - centres[0]
+
+    # convert to bin edges
+    bins       = np.zeros(centres.shape[0] + 1)
+    bins[0]    = min(centres[0], ts.min())
+    bins[1:-1] = centres[:-1] + length / 2
+    bins[  -1] = max(centres[-1], ts.max())
+
     X = np.histogram(ts, bins=bins)[0]
     X = X / np.sum(X)
     X = -np.sum(X * np.log(X + np.finfo(float).eps))
@@ -135,7 +156,7 @@ def tsjump(data, ic_idx):
     mx = np.amax(np.abs(diff_ts))
     imx = np.argmax(np.abs(diff_ts))
 
-    sel = np.arange(imx - 2, imx + 2)
+    sel = np.arange(imx - 2, imx + 3)
 
     x1 = sel >= 0
     x2 = sel < diff_ts.shape[0]
@@ -231,7 +252,7 @@ def fftfiner(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
 
 @feature_extractor
 def fftfinerwrtnull(data, ic_idx, thres=[.01, .025, .05, .1, .15, .2, .25]):
-    # Concolve single-gamma HRF w/WGN and compare its spectrum w/actual RSN
+    # Convolve single-gamma HRF w/WGN and compare its spectrum w/actual RSN
     # do it for real
 
     ts = data.ica.get_timecourse(ic_idx)
@@ -427,9 +448,10 @@ def clusterdist(data, ic_idx, ic_threshold=2.5):
     return feat
 
 
-@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', ic_idx))
+@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_abs_ic_filename', data.fixdir, ic_idx))
 def _get_abs_ic_filename(data, ic_idx):
-    fname = op.join(data.fixdir, f'icmap{ic_idx}_abs.nii.gz')
+
+    fname = data.fix_tree.update(ic_idx=ic_idx).get('icmap_abs')
 
     # print(f'save _get_abs_image_filename: {fname}')
     icmap = data.ica.get_spatialmap(ic_idx)
@@ -442,9 +464,10 @@ def _get_abs_ic_filename(data, ic_idx):
     return fname
 
 
-@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', id(data), ic_idx))
+@cached(cache={}, key=lambda data, ic_idx: hashkey('_get_ic_filename', data.fixdir, ic_idx))
 def _get_ic_filename(data, ic_idx):
-    filename = op.join(data.fixdir, f'icmap{ic_idx}.nii.gz')
+
+    filename = data.fix_tree.update(ic_idx=ic_idx).get('icmap')
 
     # print(f'save _get_image_filename: {filename}')
     data.ica.get_spatialmap(ic_idx).to_filename(filename)
@@ -452,11 +475,12 @@ def _get_ic_filename(data, ic_idx):
     return filename
 
 
-@cached(cache={}, key=lambda d: hashkey('_get_data_tmean_filename', id(d)))
-def _get_data_tmean_filename(d):
-    filename = op.join(d.fixdir, f'input_data_tmean.nii.gz')
+@cached(cache={}, key=lambda data: hashkey('_get_data_tmean_filename', data.fixdir))
+def _get_data_tmean_filename(data):
 
-    d0 = d.input.data
+    filename = data.fix_tree.get('tmean')
+
+    d0 = data.input.data
 
     nb.Nifti1Image(
         np.mean(d0.get_fdata(), axis=-1),
@@ -469,19 +493,14 @@ def _get_data_tmean_filename(d):
 
 @feature_extractor
 def negativevspositive(data, ic_idx, ic_threshold=2.5):
-    icmap = _get_ic_filename(data, ic_idx)
+
+    icmap     = _get_ic_filename(    data, ic_idx)
     icmap_abs = _get_abs_ic_filename(data, ic_idx)
 
-    out = []
+    ent,  a, aS = fslstats(icmap)    .E.M.S.run()
+    aent, b, bS = fslstats(icmap_abs).E.M.S.run()
 
-    out += [float(util.run(['fslstats', icmap, '-E']))]
-    out += [float(util.run(['fslstats', icmap_abs, '-E']))]
-
-    a = float(util.run(['fslstats', icmap, '-M']))
-    aS = float(util.run(['fslstats', icmap, '-S']))
-
-    b = float(util.run(['fslstats', icmap_abs, '-M']))
-    bS = float(util.run(['fslstats', icmap_abs, '-S']))
+    out = [ent, aent]
 
     eps = np.finfo(float).eps
 
@@ -507,15 +526,15 @@ def zstattofuncratio(data, ic_idx):
 
     icmap = _get_ic_filename(data, ic_idx)
     func_mean = _get_data_tmean_filename(data)
-    workdir = data.fixdir
 
-    img_ratio = op.join(workdir, 'dummyd')
-    util.run(['fslmaths', icmap, '-s', '5', '-abs', '-div', func_mean, img_ratio])
-    img_ratio = nb.load(img_ratio + '.nii.gz').get_fdata()
+    img_ratio = data.fix_tree.get('img_ratio')
+    img_mult  = data.fix_tree.get('img_mult')
 
-    img_mult = op.join(workdir, 'dummym')
-    util.run(['fslmaths', icmap, '-s', '5', '-abs', '-mul', func_mean, img_mult])
-    img_mult = nb.load(img_mult + '.nii.gz').get_fdata()
+    fslmaths(icmap).smooth(5).abs().div(func_mean).run(img_ratio)
+    fslmaths(icmap).smooth(5).abs().mul(func_mean).run(img_mult)
+
+    img_ratio = nb.load(img_ratio).get_fdata()
+    img_mult  = nb.load(img_mult) .get_fdata()
 
     a = np.logical_not(np.isnan(img_mult)) & np.logical_not(np.isinf(img_mult))
     dmp = img_mult[(img_mult > 0) & a]
@@ -603,7 +622,6 @@ def everynthvariance(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@lru_cache()
 def _extract_tissue_timeseries(func, dseg):
     ts_csf = np.mean(func.get_fdata()[dseg.get_fdata() == 1], axis=0)
     ts_gm = np.mean(func.get_fdata()[dseg.get_fdata() == 2], axis=0)
@@ -612,7 +630,7 @@ def _extract_tissue_timeseries(func, dseg):
     return ts_csf, ts_gm, ts_wm
 
 
-@lru_cache()
+@cached(cache={})
 def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
     if xfm.endswith('.mat'):
         log.debug(f'Apply transform: affine')
@@ -638,34 +656,25 @@ def _apply_xfm(src, ref, xfm, out_name, interp='spline'):
     return nb.load(out_name)
 
 
-@cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', id(data)))
+@cached(cache={}, key=lambda data: hashkey('_get_dseg_filename', data.fixdir))
 def _get_dseg_filename(data):
-    dseg = op.join(data.fixdir, f'dseg.nii.gz')
-
-    # print(f'save _get_dseg_filename: {dseg}')
+    dseg = data.fix_tree.get('dseg')
     data.spatialmaps['dseg'].data.to_filename(dseg)
-
     return dseg
 
 
-@cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', id(data)))
+@cached(cache={}, key=lambda data: hashkey('_get_brainmask_filename', data.fixdir))
 def _get_brainmask_filename(data):
-    d = op.join(data.fixdir, f'brainmask.nii.gz')
-
-    # print(f'save _get_brainmask_filename: {d}')
+    d = data.fix_tree.get('brainmask')
     data.spatialmaps['brainmask'].data.to_filename(d)
-
     return d
 
 
-@cached(cache={}, key=lambda data, map_key: hashkey(map_key, id(data)))
+@cached(cache={}, key=lambda data, map_key: hashkey(map_key, data.fixdir))
 def _get_map_with_tempname(data, map_key):
-    fname = op.join(data.fixdir, f'{map_key}.nii.gz')
-
-    # print(f'_get_map_filename: {map_key} {fname}')
+    fname = data.fix_tree.get(map_key)
     d = data.spatialmaps[map_key].data
     d.to_filename(fname)
-
     return fname
 
 
@@ -692,8 +701,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
         ref=func_mean,
         xfm=struct2func_xfm,
         interp='nearestneighbour',
-        out_name=f'{fixdir}/dseg-to-input.nii.gz'
-    )
+        out_name=data.fix_tree.get('dseg_to_input'))
 
     func = data.input.data  # nifti
     ts_csf, ts_gm, ts_wm = _extract_tissue_timeseries(func, seg)
@@ -703,7 +711,7 @@ def masktscorrandoverlap(data, ic_idx, ic_threshold=2.5):
 
     clf = linear_model.LinearRegression()
 
-    ts = ts / scipy.std(ts)
+    ts = ts / np.std(ts)
     N = ts.shape[0]
 
     X = np.concatenate((
@@ -742,13 +750,12 @@ def smoothest(data, ic_idx):
 
     icmap = _get_ic_filename(data, ic_idx)
     func_brain_mask = _get_brainmask_filename(data)
+    smth = smoothest_cmd(zstat=icmap, mask=func_brain_mask)
 
-    smth = util.run(['smoothest', '-z', icmap, '-m', func_brain_mask])
-    smth = smth.split('\n')
-    for l in smth:
-        if l.startswith('RESELS'):
-            out = float(l.split(' ')[1])
-    return [out]
+    # compatibility: in old fix this value
+    # is referred to as "smoothest:0", so
+    # we return it as a list of length 1
+    return [smth['RESELS']]
 
 
 @feature_extractor
@@ -767,7 +774,7 @@ def spatialoverlap(data, ic_idx):
         ref=func_mean,
         xfm=struct2func_xfm,
         interp='nearestneighbour',
-        out_name=f'{fixdir}/dseg-to-input.nii.gz'
+        out_name=data.fix_tree.get('dseg_to_input')
     )
 
     icmap_abs = np.abs(data.ica.get_spatialmap(ic_idx).get_fdata())
@@ -787,43 +794,46 @@ def maxtfce(data, ic_idx, ic_threshold=2.5):
     # % test for "clusterness" / "compactness" - e.g. feed through TFCE and
     # % take the max (maybe pre-TFCE normalise e.g. by max(abs(z)))
 
-    icmap = _get_ic_filename(data, ic_idx)
+    out    = []
+    icmap  = _get_ic_filename(data, ic_idx)
+    std    = fslstats(icmap).S.run()
+    icmap2 = data.fix_tree.get('maxtfce')
 
-    std = util.run(['fslstats', icmap, '-S'])
+    fslmaths(icmap).abs().div(std).tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()]
 
-    out = []
+    fslmaths(icmap).abs().tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()]
 
-    icmap2 = op.join(op.dirname(icmap), 'dummy2')
-    util.run(['fslmaths', icmap, '-abs', '-div', std, '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
-
-    util.run(['fslmaths', icmap, '-abs', '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
-
-    util.run(['fslmaths', icmap, '-abs', '-thr', str(ic_threshold), '-tfce', '2', '0.5', '6', icmap2])
-    out += [float(util.run(['fslstats', icmap2, '-P', '100']))]
+    fslmaths(icmap).abs().thr(ic_threshold).tfce(2, 0.5, 6).run(icmap2)
+    out += [fslstats(icmap2).P(100).run()]
 
     return out
 
 
-@lru_cache(maxsize=None)
-def _create_edge_masks(func_brain_mask, workdir):
-    # create edge masks if not already created
-    # load edge masks
+
+# create edge masks if not already created
+@cached(cache={}, key=lambda data, func_brain_mask: hashkey('_create_edge_masks', data.fixdir, func_brain_mask))
+def _create_edge_masks(data, func_brain_mask):
 
     log.info('Creating edge masks')
 
     # create edge masks in native functional space
     # from the func brain mask
-    mask = func_brain_mask
-    ero_mask = [mask] + [op.join(workdir, f'maske{i + 1}') for i in range(5)]
-    edge_mask = [op.join(workdir, f'edge{i + 1}') for i in range(5)]
+    mask       = func_brain_mask
+    ero_masks  = [mask]
+    edge_masks = []
 
     for i in range(5):
-        util.run(['fslmaths', ero_mask[i], '-eroF', ero_mask[i + 1]])
-        util.run(['fslmaths', mask, '-sub', ero_mask[i + 1], edge_mask[i]])
+        tree = data.fix_tree.update(ero=(i + 1))
+        ero_masks .append(tree.get('ero_mask'))
+        edge_masks.append(tree.get('edge_mask'))
 
-    return [nb.load(f'{m}.nii.gz') for m in edge_mask]
+    for i in range(5):
+        fslmaths(ero_masks[i]).eroF().run(ero_masks[i + 1])
+        fslmaths(mask).sub(ero_masks[i + 1]).run(edge_masks[i])
+
+    return [nb.load(m) for m in edge_masks]
 
 
 @feature_extractor
@@ -835,9 +845,8 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
 
     icmap = data.ica.get_spatialmap(ic_idx)
     func_brainmask = _get_brainmask_filename(data)
-    workdir = data.fixdir
 
-    edge_masks = _create_edge_masks(func_brainmask, workdir)
+    edge_masks = _create_edge_masks(data, func_brainmask)
 
     out = []
 
@@ -859,37 +868,33 @@ def edgemasks(data, ic_idx, ic_threshold=2.5):
     return out
 
 
-@cached(
-    cache={},
-    key=lambda func, standard2func_tx, struct, struct2func_xfm, workdir, veins_exf: hashkey('_create_sag_masks')
-)
-def _create_sag_masks(func: nb.Nifti1Image,
+@cached(cache={}, key=lambda data, *a, **kwa: hashkey('_create_sag_masks', data.fixdir))
+def _create_sag_masks(data,
+                      func: nb.Nifti1Image,
                       standard2func_tx: nb.Nifti1Image,
                       struct: nb.Nifti1Image,
                       struct2func_xfm: str,
-                      workdir,
                       veins_exf: nb.Nifti1Image = None) -> List[str]:
-    log.info('Creating sagittal masks')
 
-    FSLDIR = os.getenv('FSLDIR', '')
+    log.info('Creating sagittal masks')
 
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
         log.info('Affine registration of native structural to standard (MNI152)')
 
-        struct2std = op.join(workdir, 'struct2std.mat')
+        ref        = get_standard('brain', resolution=1)
+        struct2std = data.fix_tree.get('struct2std')
+        std2struct = data.fix_tree.get('std2struct')
         flirt(
             src=struct,
-            ref=op.join(FSLDIR, 'data/standard/MNI152_T1_1mm_brain'),
+            ref=ref,
             omat=struct2std,
         )
 
-        std2struct = op.join(workdir, 'std2struct.mat')
         invxfm(struct2std, std2struct)
 
         if struct2func_xfm.endswith('.mat'):
-
-            standard2func_tx = op.join(workdir, 'std2func.mat')
+            standard2func_tx = data.fix_tree.get('std2func')
             concatxfm(
                 std2struct,
                 struct2func_xfm,
@@ -898,7 +903,7 @@ def _create_sag_masks(func: nb.Nifti1Image,
 
         elif struct2func_xfm.endswith('.nii.gz'):
 
-            standard2func_tx = op.join(workdir, 'std2func_warp.nii.gz')
+            standard2func_tx = data.fix_tree.get('std2func_warp')
             convertwarp(
                 ref=func,
                 premat=std2struct,
@@ -915,30 +920,32 @@ def _create_sag_masks(func: nb.Nifti1Image,
     start = 0
 
     if veins_exf is not None:
-        fname = op.join(workdir, f'std1mm2exfunc0.nii.gz')
+        fname = data.fix_tree.get('std1mm2exfunc0')
         veins_exf.to_filename(fname)
         sag_masks[0, 0] = nb.load(fname)
 
-        fslmaths(fname).dilF().run(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
-        sag_masks[0, 1] = nb.load(op.join(workdir, 'std1mm2exfunc0dil.nii.gz'))
+        mdil  = data.fix_tree.get('std1mm2exfunc0dil')
+        mdil2 = data.fix_tree.get('std1mm2exfunc0dil2')
 
-        fslmaths(fname).dilF().dilF().run(op.join(workdir, f'std1mm2exfunc0dil2.nii.gz'))
-        sag_masks[0, 2] = nb.load(op.join(workdir, 'std1mm2exfunc0dil2.nii.gz'))
+        fslmaths(fname).dilF().run(mdil)
+        sag_masks[0, 1] = nb.load(mdil)
+
+        fslmaths(fname).dilF().dilF().run(mdil2)
+        sag_masks[0, 2] = nb.load(mdil2)
 
         start += 1
 
     for r in range(start, sag_masks.shape[0]):
         for c, dlabel in enumerate(('', 'dil', 'dil2')):
-            in_name = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
-            out_name = op.join(workdir, f'std1mm2exfunc{r}{dlabel}')
+            in_name  = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
+            out_name = data.fix_tree.get(f'std1mm2exfunc{r}{dlabel}')
 
             sag_masks[r, c] = _apply_xfm(
                 src=in_name,
                 ref=func,
                 xfm=standard2func_tx,
-                interp='spline',
-                out_name=out_name + '.nii.gz'
-            )
+                interp='trilinear',
+                out_name=out_name)
 
     return list(sag_masks)
 
@@ -970,11 +977,11 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
     wch = icmap_abs > ic_threshold
 
     sag_masks = _create_sag_masks(
+        data=data,
         func=func_mean,
         standard2func_tx=standard2func_tx,
         struct=struct,
         struct2func_xfm=struct2func_xfm,
-        workdir=workdir,
         veins_exf=veins_exf,
     )
 
@@ -1003,14 +1010,13 @@ def sagmasks(data, ic_idx, ic_threshold=2.5):
 
 @feature_extractor
 def stripe(data, ic_idx):
-    icmap = nb.load(_get_ic_filename(data, ic_idx))
 
-    dm1 = op.join(op.dirname(icmap.get_filename()), 'dummy01')
-    util.run(['fslmaths', icmap.get_filename(), '-s', '2', '-abs', dm1])
-    util.run(['fslmaths', icmap.get_filename(), '-abs', '-s', '2', '-sub', dm1, '-abs', dm1])
-    p95 = float(util.run(['fslstats', dm1, '-P', '95']))
+    icmap = _get_ic_filename(data, ic_idx)
+    dm1   = data.fix_tree.get('stripe')
 
-    # util.run(['imrm', dm1])
-    os.remove(dm1+'.nii.gz')
+    fslmaths(icmap).s(2).abs().run(dm1)
+    fslmaths(icmap).abs().s(2).sub(dm1).abs().run(dm1)
+
+    p95 = fslstats(dm1).P(95).run()
 
     return [p95]

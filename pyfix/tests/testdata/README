@@ -1,0 +1,14 @@
+The pyfix test data is taken from a couple of different sources:
+
+  - rest.ica.zip contains a MELODIC analysis performed on the "nice" data set
+    from the FSL Course FMRI 3 practical.
+  - rest.ica.fixdir.zip contains the fix/ directory from running the original
+    (MATLAB/R) version of FIX on rest.ica.zip
+  - training_data.zip contains features.csv and hand_labels_noise.txt files,
+    for 100 subjects, from the publicly available "Standard" FIX training data
+    set (https://www.fmrib.ox.ac.uk/datasets/FIX-training/).
+  - training.pyfix_model is a pyfix model trained on training_data.zip.
+  - cleaned_data.zip contains the results of running the original FIX on
+    rest.ica.zip, with a few different variants of "fix -a". A ROI of the
+    cleaned 4D data is stored to save space - the ROI parameters are stored in
+    fslroi_params.txt.

@@ -1,27 +1,30 @@
 #!/usr/bin/env python
-import logging
-import os
-import os.path as op
-from collections import namedtuple
-from dataclasses import dataclass, field
-from typing import Optional, List, Type
+
+import                    logging
+import                    os
+import os.path     as     op
+from   collections import namedtuple
+from   dataclasses import dataclass, field
+from   typing      import Optional, List, Type
 
 import nibabel as nb
-import numpy as np
-import pandas as pd
-from cachetools import cached
+import numpy   as np
+import pandas  as pd
+
+from cachetools      import cached
 from cachetools.keys import hashkey
-from fsl.data import featanalysis
-from fsl.utils.filetree import FileTree
-from scipy import io
+
+from fsl.data     import featanalysis
+from fsl.wrappers import fast
+from file_tree    import FileTree
+
 
 import pyfix.feature as feature
-from pyfix import util, clean
+from pyfix import util, clean, io
 
 IC = namedtuple('IC', ['map', 'timeseries'])
 
 log = logging.getLogger(__name__)
-DEFAULTS = FileTree.read(util.get_resource('pyfix.tree'), partial_fill=False)
 
 
 @dataclass
@@ -195,12 +198,14 @@ class ICA:
 @dataclass(frozen=True)
 class FixData:
     """Container for FIX input data."""
-    fixdir: str
-    ica: ICA
-    input: Optional[Type[TimeCourse]] = None
-    timecourses: Optional[dict] = field(default_factory=dict)
-    spatialmaps: Optional[dict] = field(default_factory=dict)
-    hp_fwhm: Optional[float] = None
+    fixdir      : str
+    ica         : ICA
+    input       : Type[TimeCourse] = None
+    timecourses : dict             = field(default_factory=dict)
+    spatialmaps : dict             = field(default_factory=dict)
+    hp_fwhm     : float            = None
+    input_tree  : FileTree         = None
+    fix_tree    : FileTree         = None
 
     @property
     def nic(self) -> int:
@@ -215,55 +220,52 @@ class FixData:
             assert v.ntime == self.ica.ntime, \
                 f'number time samples of {k} timecourse ({v.ntime}) must equal ICA ({self.ica.ntime})'
 
-        # for k, v in self.spatialmaps.items():
-        #     assert v.nspace == self.ica.nspace, \
-        #         f'number spatial samples of {k} spatialmap ({v.nspace}) must equal ICA ({self.ica.nspace})'
-
         if self.input is not None:
             assert self.input.ntime == self.ica.ntime, \
                 f'number of time samples in input data ({self.input.ntime}) must equal ICA ({self.ica.ntime})'
 
     @classmethod
-    def from_melodic_dir(cls, meldir: str, fixdir: Optional[str] = None, highpass_fwhm=None):
+    def from_input_dir(cls,
+                       indir         : io.InputDirectory,
+                       highpass_fwhm : float = None):
 
-        # fixdir
+        fixdir  = indir.fixdir
+        intree  = indir.input_tree
+        fixtree = indir.fix_tree
+        indir   = indir.indir
 
-        if fixdir is None:
-            fixdir = op.join(meldir, 'pyfix')
+        os.makedirs(fixdir, exist_ok=True)
 
         # melodic data
 
-        func = nb.load(op.join(meldir, 'filtered_func_data.nii.gz'))
+        func = nb.load(intree.get('filtered_func_data'))
         tr = func.header.get_zooms()[3]
 
-        func_brainmask = nb.load(op.join(meldir, 'mask.nii.gz'))
+        func_brainmask = nb.load(intree.get('mask'))
 
-        ic_timeseries = np.loadtxt(op.join(meldir, 'filtered_func_data.ica', 'melodic_mix'))
-        ic_map = nb.load(op.join(meldir, 'filtered_func_data.ica', 'melodic_IC.nii.gz'))
+        ic_timeseries = np.loadtxt(intree.get('melodic_mix'))
+        ic_map = nb.load(intree.get('melodic_IC'))
 
-        struct_fast_seg = op.join(meldir, 'reg/highres_pveseg.nii.gz')
-        struct_fs_wmparc = op.join(meldir, 'reg/wmparc.nii.gz')
+        struct_fs_wmparc = intree.get('wmparc')
 
-        struct = nb.load(op.join(meldir, 'reg/highres.nii.gz'))
-        struct2func_xfm = op.join(meldir, 'reg/highres2example_func.mat')
+        struct = nb.load(intree.get('highres'))
+        struct2func_xfm = intree.get('highres2example_func_mat')
 
-        veins_exf = op.join(meldir, 'reg/veins_exf.nii.gz')
+        veins_exf = intree.get('veins_exf')
 
-        #  structural segmentations
+        # structural segmentations - may
+        # exist in input dir or in fix dir
+        struct_fast_seg = intree.get('highres_pveseg')
+        if not op.exists(struct_fast_seg):
+            struct_fast_seg = fixtree.get('fastsg')
 
         if not op.exists(struct_fast_seg):
-            # TODO: move to feature with caching so it is only run JIT
             log.info('Creating structural segmentation with FSL FAST')
 
-            if not op.exists(fixdir):
-                os.makedirs(fixdir)
+            fast_prefix = fixtree.placeholders['fast_basename']
+            fast_prefix = op.join(op.dirname(struct_fast_seg), fast_prefix)
 
-            util.run([
-                'fast', '-t', '1', '-o',
-                op.join(fixdir, 'fastsg'),
-                struct.get_filename(),
-            ])
-            struct_fast_seg = op.join(fixdir, 'fastsg_pveseg.nii.gz')
+            fast(struct.get_filename(), fast_prefix, t=1)
 
         dseg = nb.load(struct_fast_seg)
 
@@ -272,51 +274,46 @@ class FixData:
             subcort = util.create_mask(
                 dseg=struct_fs_wmparc,
                 labels=(10, 11, 12, 13, 49, 50, 51, 52, 26, 58),
-                outname=op.join(fixdir, 'subcort.nii.gz')
-            )
+                outname=fixtree.get('subcort'))
 
             dseg = nb.load(struct_fast_seg)
             dseg_d = dseg.get_fdata()
             dseg_d[subcort.get_fdata().astype(bool)] = 2
-            dseg = nb.Nifti1Image(dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
+            dseg = nb.Nifti1Image(
+                dseg_d.astype(int), header=dseg.header, affine=dseg.affine)
             dseg.to_filename(struct_fast_seg)
 
         # standard-to-func transforms
 
-        standard = op.join(meldir, 'reg/standard.nii.gz')
+        standard = intree.get('standard')
         std2func_xfm = None
 
-        std2func_mat = op.join(meldir, 'reg/standard2example_func.mat')
+        std2func_mat = intree.get('standard2example_func_mat')
         if op.exists(std2func_mat):
             std2func_xfm = std2func_mat
 
-        std2func_warp = op.join(meldir, 'reg/standard2example_func_warp.nii.gz')
+        std2func_warp = intree.get('standard2example_func_warp')
         if op.exists(std2func_warp):
             std2func_xfm = std2func_warp
 
         # highpass settings
-
-        if op.exists(op.join(meldir, 'design.fsf')):
-            fsf = featanalysis.loadSettings(meldir)
+        design = intree.get('design')
+        if op.exists(design):
+            fsf = featanalysis.loadFsf(design)
             if int(fsf['temphp_yn']) == 1:
                 highpass_fwhm = float(fsf['paradigm_hp'])
 
         # motion parameters
-
-        mp = None
-
-        # check if HCP-style filtered motion parameters (*_mcf_conf_hp.nii.gz) exist
-        for fname in ('prefiltered_func_data_mcf.par', 'prefiltered_func_data_mcf_conf_hp.nii.gz'):
-            if op.exists(op.join(meldir, 'mc', fname)):
-                mp = op.join(meldir, 'mc', fname)
+        mp = intree.get('motion_params')
+        if not op.exists(mp):
+            mp = None
 
         # filter, and normalise motion confounds, as required
         if mp is not None:
-            mp = clean.motion_confounds(mp, tr=tr, temporal_fwhm=highpass_fwhm, tmpdir=meldir)
-            mp = clean._normalise(mp)
+            mp = clean.motion_confounds(
+                mp, tr=tr, temporal_fwhm=highpass_fwhm)
 
         # instantiate class
-
         d = cls(
             fixdir=fixdir,
             ica=ICA(
@@ -331,6 +328,8 @@ class FixData:
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
+            input_tree=intree,
+            fix_tree=fixtree
         )
 
         if op.exists(standard):
@@ -346,51 +345,6 @@ class FixData:
 
         return d
 
-    @classmethod
-    def from_osl(cls, fname, fixdir=None):
-
-        ica = io.loadmat(fname)['ica']
-
-        # IC time courses [time x numICs]
-        ic_timeseries = ica[0, 0]['tc']
-
-        # IC spatial maps [sensors x numICs]
-        ic_map = ica[0, 0]['sm']
-
-        # sampling rate
-        srate = ica[0, 0]['fsample'][0][0]
-
-        # EOG, EMG, ECG
-        eog = ica[0, 0]['EOG'].T
-        emg = ica[0, 0]['EMG'].T
-        ecg = ica[0, 0]['ECG'].T
-
-        # component labels
-        labels = ica[0, 0]['bad_components']
-        labels = np.array(labels)
-
-        # fixdir
-
-        if fixdir is None:
-            fixdir = op.join(op.splitext(fname)[0], 'pyfix')
-
-        # instantiate class
-
-        d = cls(
-            fixdir=fixdir,
-            ica=ICA(
-                maps=SpatialMap(ic_map),
-                timecourses=TimeCourse(ic_timeseries, fs=srate),
-            ),
-            timecourses={
-                'eog': TimeCourse(eog, fs=srate),
-                'ecg': TimeCourse(ecg, fs=srate),
-                'emg': TimeCourse(emg, fs=srate),
-            },
-        )
-
-        return d, labels
-
 
 def extract_features(data: FixData,
                      features: List[str]):
@@ -404,7 +358,7 @@ def extract_features(data: FixData,
     # extract features
     rows = []
     for ic_idx in range(data.nic):
-        log.info(f'Extracting features for IC {ic_idx}')
+        log.debug(f'Extracting features for IC {ic_idx}')
 
         row0 = [feature.FEATURE_EXTRACTORS[fe](data, ic_idx) for fe in features]
         rows.append(pd.concat(row0, verify_integrity=True))
@@ -412,7 +366,3 @@ def extract_features(data: FixData,
     features = pd.concat(rows, axis=1).T
 
     return features
-
-
-def _index_img(img, idx):
-    return nb.Nifti1Image(img.get_fdata()[:, :, :, idx], img.affine, img.header)

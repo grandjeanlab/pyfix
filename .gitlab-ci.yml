@@ -42,5 +42,6 @@ test:
     - if:   $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: always
     - when: never
+
   script:
-    - pytest
+    - bash .ci/unit_test.sh
