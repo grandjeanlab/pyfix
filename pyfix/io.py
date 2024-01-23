@@ -516,5 +516,4 @@ def read_features(path: str, columns : List[str] = None):
 
 def save_features(path : str, features : pd.DataFrame):
     """Save legacy FIX features to file."""
-    features[feature.FEATURE_LABELS].to_csv(
-        path, index=None, header=None)
+    features[feature.FEATURE_LABELS].to_csv(path, index=None)
