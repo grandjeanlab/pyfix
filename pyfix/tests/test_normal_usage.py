@@ -87,8 +87,8 @@ def test_feature_extraction():
 
         main('-f rest.ica')
 
-        got = legacy.read_features(op.join('rest.ica', 'fix', 'features.csv'))
-        exp = legacy.read_features(op.join(            'fix', 'features.csv'))
+        got = io.read_features(op.join('rest.ica', 'fix', 'features.csv'))
+        exp = io.read_features(op.join(            'fix', 'features.csv'))
 
         for col in feature.FEATURE_LABELS:
             gotcol = got[col]
