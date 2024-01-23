@@ -139,7 +139,7 @@ def test_classify():
         main(f'-c {icadir} {TRAINED_MODEL} 30')
 
         model     = op.splitext(op.basename(TRAINED_MODEL))[0]
-        labelfile = legacy.generate_label_filename(icadir, TRAINED_MODEL, 30)
+        labelfile = io.generate_label_filename(icadir, TRAINED_MODEL, 30)
 
         assert op.exists(labelfile)
         loadLabelFile(labelfile)
@@ -152,7 +152,7 @@ def test_classify():
              f'{" ".join(icadirs)}')
 
         for icadir, threshold in  it.product(icadirs, thresholds):
-            labelfile = legacy.generate_label_filename(
+            labelfile = io.generate_label_filename(
                 icadir, TRAINED_MODEL, threshold)
             assert op.exists(labelfile)
 
