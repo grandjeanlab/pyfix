@@ -26,7 +26,7 @@ from fsl.wrappers import (fslmaths,
 from sklearn import linear_model
 from spectrum import aryule
 
-from pyfix import util, legacy
+from pyfix import util
 
 
 # TODO: add typing
@@ -35,6 +35,50 @@ from pyfix import util, legacy
 # TODO: tidy code.  much of this is ported from legacy-fix matlab code and is very untidy/inefficient
 
 log = logging.getLogger(__name__)
+
+
+# List of all feature (column) labels. Names correspond
+# to functions defined in this module, which are registered
+# with the feature_extractor decorator.
+#
+# Feature extractors which return multiple values will
+# have an index appended to their name, e.g.:
+#
+#     @feature_extractor
+#     def myfeature():
+#         return [1,2,3]
+#
+# will result in myfeature:0, myfeature:1, myfeature:2
+FEATURE_LABELS = [
+    'nic',
+    *[f'arvswgn:{i}' for i in np.arange(2)],
+    *[f'arfull:{i}' for i in np.arange(5)],
+    'skewness',
+    'kurtosis',
+    'mean_median',
+    *[f'entropy:{i}' for i in np.arange(2)],
+    *[f'tsjump:{i}' for i in np.arange(6)],
+    *[f'fftcoarse:{i}' for i in np.arange(4)],
+    *[f'fftfiner:{i}' for i in np.arange(7)],
+    *[f'fftfinerwrtnull:{i}' for i in np.arange(8)],
+    *[f'motioncorrelation:{i}' for i in np.arange(6)],
+    *[f'oupjk:{i}' for i in np.arange(2)],
+    *[f'clusterdist:{i}' for i in np.arange(9)],
+    *[f'negativevspositive:{i}' for i in np.arange(6)],
+    *[f'zstattofuncratio:{i}' for i in np.arange(4)],
+    *[f'slicewisestats:{i}' for i in np.arange(4)],
+    *[f'everynthvariance:{i}' for i in np.arange(4)],
+    *[f'masktscorrandoverlap:{i}' for i in np.arange(12)],
+    'smoothest:0',
+    'spatialoverlap',
+    *[f'maxtfce:{i}' for i in np.arange(3)],
+    *[f'edgemasks:{i}' for i in np.arange(15)],
+    *[f'sagmasks:{i}' for i in np.arange(72)],
+    'stripe:0',
+    *[f'dim:{i}' for i in np.arange(4)],
+    *[f'pixdim:{i}' for i in np.arange(4)],
+]
+
 
 FEATURE_EXTRACTORS = {}
 
