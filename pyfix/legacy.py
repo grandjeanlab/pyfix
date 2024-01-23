@@ -286,27 +286,6 @@ def save_features(path : str, features : pd.DataFrame):
         path, index=None, header=None)
 
 
-def generate_file_table(*args):
-    """Generate a table of files from legacy FIX folders.
-
-    Args:
-        *args:
-
-    Returns:
-
-    """
-
-    d = pd.DataFrame(
-        {
-            'features': [op.join(f, 'fix/features.csv') for f in args],
-            'labels': [op.join(f, 'hand_labels_noise.txt') for f in args],
-            'subid': [i for i, _ in enumerate(args)]
-        }
-    )
-
-    return d
-
-
 def generate_label_filename(meldir, modelfile, threshold):
     model     = op.splitext(op.basename(modelfile))[0]
     threshold = int(threshold)

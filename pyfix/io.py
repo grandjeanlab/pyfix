@@ -74,15 +74,10 @@ def save_file_table(filename, tbl):
     tbl.to_csv(filename, index=None)
 
 
-def generate_file_table(*args,
-                        feature_name='pyfix/features.pyfix_features',
-                        label_name='hand_labels_noise.txt'):
-    """
-    Helper function to generate a table of file.
+def generate_file_table(*args):
+    """Generate a table of files from FIX folders.
 
     Args:
-        label_name:
-        feature_name:
         *args:
 
     Returns:
@@ -91,8 +86,8 @@ def generate_file_table(*args,
 
     d = pd.DataFrame(
         {
-            'features': [op.join(f, feature_name) for f in args],
-            'labels': [op.join(f, label_name) for f in args],
+            'features': [op.join(f, 'fix/features.csv') for f in args],
+            'labels': [op.join(f, 'hand_labels_noise.txt') for f in args],
             'subid': [i for i, _ in enumerate(args)]
         }
     )

@@ -184,7 +184,7 @@ def run_train(meldir          : List[str],
         assert_has_features(d)
         assert_has_hand_labels(d)
 
-    file_table = legacy.generate_file_table(*meldir)
+    file_table = io.generate_file_table(*meldir)
 
     #  save file table
     io.save_file_table(basename, file_table)
