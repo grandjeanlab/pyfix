@@ -89,7 +89,7 @@ def test_feature_extraction():
         got = legacy.read_features(op.join('rest.ica', 'fix', 'features.csv'))
         exp = legacy.read_features(op.join(            'fix', 'features.csv'))
 
-        for col in legacy.LEGACY_FEATURE_LABELS:
+        for col in legacy.FEATURE_LABELS:
             gotcol = got[col]
             expcol = exp[col]
             if np.all(np.isclose(gotcol, expcol)):
