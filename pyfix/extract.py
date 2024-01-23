@@ -204,6 +204,7 @@ class FixData:
     timecourses : dict             = field(default_factory=dict)
     spatialmaps : dict             = field(default_factory=dict)
     hp_fwhm     : float            = None
+    species     : str              = None
     input_tree  : FileTree         = None
     fix_tree    : FileTree         = None
 
@@ -328,6 +329,7 @@ class FixData:
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
+            species=indir.species,
             input_tree=intree,
             fix_tree=fixtree
         )

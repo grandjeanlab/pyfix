@@ -25,6 +25,7 @@ from fsl.data import melodicanalysis, featanalysis
 from fsl.wrappers import wrapperconfig
 
 from pyfix      import (extract,
+                        feature,
                         legacy,
                         io,
                         classify,
@@ -155,7 +156,7 @@ def run_feature_extraction(meldir     : str,
     # extract legacy features
     f = extract.extract_features(
         data=d,
-        features=legacy.FEATURE_EXTRACTORS)
+        features=sorted(feature.FEATURE_EXTRACTORS.keys()))
 
     # save features (pyfix and legacy-fix formats)
     f.to_csv(d.fix_tree.get('pyfix_features'), index=None)

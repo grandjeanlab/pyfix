@@ -52,8 +52,6 @@ FEATURE_LABELS = [
     *[f'pixdim:{i}' for i in np.arange(4)],
 ]
 
-FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in FEATURE_LABELS]))
-
 
 def read_features(path: str, columns : List[str] = None):
     """Read legacy FIX features from file.
