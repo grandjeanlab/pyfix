@@ -48,6 +48,9 @@ pyfix = ["VERSION", "resources/*", "resources/masks/*", "resources/models/*", "e
 [tool.setuptools.dynamic]
 version = {file = "pyfix/VERSION"}
 
+[tool.coverage.run]
+include = ["pyfix/*"]
+omit    = ["pyfix/tests/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["pyfix/tests"]
