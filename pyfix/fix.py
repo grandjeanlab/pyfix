@@ -318,7 +318,7 @@ def run_apply(labels     : str,
     motion_parameters_filt  = ftree.get('motion_params_filtered')
     motion_parameters_clean = ftree.get('motion_params_cleaned')
 
-    ddremove = legacy.read_labels(labels)
+    ddremove = io.read_labels(labels)
 
     tr = clean.get_tr(nifti_filt)
 

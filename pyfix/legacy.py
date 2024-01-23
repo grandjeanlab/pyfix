@@ -286,32 +286,6 @@ def save_features(path : str, features : pd.DataFrame):
         path, index=None, header=None)
 
 
-def generate_label_filename(meldir, modelfile, threshold):
-    model     = op.splitext(op.basename(modelfile))[0]
-    threshold = int(threshold)
-    return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
-
-
-def read_labels(filename: str, nics : int = None):
-    """Read legacy label files, melview and hand_labels_noise.txt.
-
-    If nics is None, a sequence of one-indexed noise IC labels is returned.
-    Otherwise, a sequence with a value for each IC is returned, containing
-    1 for noise ICs, and 0 for signal ICs.
-    """
-
-    indices = fixlabels.loadLabelFile(filename, returnIndices=True)[2]
-    indices = np.array(indices, dtype=int)
-
-    if nics is None:
-        return indices
-    else:
-        labels = np.zeros(nics)
-        labels[indices - 1] = 1
-
-    return labels
-
-
 def prob_threshold(pb, threshold, col=1):
     """
     Threshold probablistic classifications.

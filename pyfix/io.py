@@ -21,7 +21,8 @@ import numpy   as np
 import pandas  as pd
 import            sklearn
 
-from pyfix import legacy
+from fsl.data import fixlabels
+from pyfix    import legacy
 
 # InconsistentVersionWarning was added in sklearn 1.3.0
 try:
@@ -413,3 +414,29 @@ def load_model(fname):
         return load_new_pyfix_model_file()
     else:
         return load_old_pyfix_model_file()
+
+
+def generate_label_filename(meldir, modelfile, threshold):
+    model     = op.splitext(op.basename(modelfile))[0]
+    threshold = int(threshold)
+    return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
+
+
+def read_labels(filename: str, nics : int = None):
+    """Read legacy label files, melview and hand_labels_noise.txt.
+
+    If nics is None, a sequence of one-indexed noise IC labels is returned.
+    Otherwise, a sequence with a value for each IC is returned, containing
+    1 for noise ICs, and 0 for signal ICs.
+    """
+
+    indices = fixlabels.loadLabelFile(filename, returnIndices=True)[2]
+    indices = np.array(indices, dtype=int)
+
+    if nics is None:
+        return indices
+    else:
+        labels = np.zeros(nics)
+        labels[indices - 1] = 1
+
+    return labels

@@ -102,7 +102,7 @@ def collate_features(
     for idx, (f0, l0, g0) in enumerate(zip(table.features, table.labels, group_vals)):
 
         train_data[idx] = legacy.read_features(f0, columns)
-        labels          = legacy.read_labels(l0, train_data[idx].shape[0])
+        labels          = io.read_labels(l0, train_data[idx].shape[0])
 
         train_data[idx]['group'] = g0
         train_data[idx]['label'] = labels
