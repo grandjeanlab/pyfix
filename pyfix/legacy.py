@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 
+from   typing   import List
+import                 csv
+import                 io
+import                 logging
 import os.path  as     op
 import pandas   as     pd
 import numpy    as     np
 from   fsl.data import fixlabels
+
+
+log = logging.getLogger(__name__)
 
 
 # Feature extractors which return multiple values will
@@ -47,18 +54,50 @@ LEGACY_FEATURE_LABELS = [
 LEGACY_FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in LEGACY_FEATURE_LABELS]))
 
 
-def read_features(path: str):
+def read_features(path: str, columns : List[str] = None):
     """Read legacy FIX features from file.
 
     Args:
-        path (str):
+        path (str):     Path to feature file
+        columns (list): List of column names - defaults to
+                        LEGACY_FEATURE_LABELS
 
     Returns:
         features table (pd.DataFrame):
-
     """
 
-    return pd.read_csv(path, header=None, names=LEGACY_FEATURE_LABELS)
+    with open(path, 'rt') as f:
+        data = f.read()
+
+    # do we have column names?
+    header = csv.Sniffer().has_header(data)
+
+    # If columns have been provided, we assume
+    # that the user knows what they're doing.
+    if columns is not None:
+        header = 0 if header else None
+
+    else:
+        # Otherwise, if the file has no header,
+        # we assume it has FEATURE_LABELS columns
+        if not header:
+            columns = LEGACY_FEATURE_LABELS
+            header  = None
+
+        # otherwise the file contains column labels
+        else:
+            header = 0
+
+    df = pd.read_csv(io.StringIO(data), header=header, names=columns)
+
+    for column in df.columns:
+        if column not in LEGACY_FEATURE_LABELS:
+            log.warning(f'Unrecognised feature column in {path}: {column}')
+    for column in LEGACY_FEATURE_LABELS:
+        if column not in df.columns:
+            log.warning(f'Missing feature column in {path}: {column}')
+
+    return df
 
 
 def save_features(path : str, features : pd.DataFrame):

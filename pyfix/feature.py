@@ -36,8 +36,6 @@ from pyfix import util, legacy
 
 log = logging.getLogger(__name__)
 
-LEGACY_FEATURE_LABELS = legacy.LEGACY_FEATURE_LABELS
-
 FEATURE_EXTRACTORS = {}
 
 

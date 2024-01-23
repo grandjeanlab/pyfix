@@ -162,13 +162,14 @@ def run_feature_extraction(meldir     : str,
     legacy.save_features(d.fix_tree.get('legacy_features'), f)
 
 
-def run_train(meldir      : List[str],
-              basename    : str,
-              model_class : str  = None,
-              loo         : bool = False,
-              tune        : bool = False,
-              n_jobs      : int  = None,
-              n_trials    : int  = None,
+def run_train(meldir          : List[str],
+              basename        : str,
+              model_class     : str  = None,
+              feature_columns : str  = None,
+              loo             : bool = False,
+              tune            : bool = False,
+              n_jobs          : int  = None,
+              n_trials        : int  = None,
               **kwargs):
 
     if tune:
@@ -188,7 +189,8 @@ def run_train(meldir      : List[str],
     io.save_file_table(basename, file_table)
 
     # read and collate all features into a training table
-    training_data = classify.collate_features(file_table, legacy_features=True)
+    training_data, feature_columns = classify.collate_features(
+        file_table, feature_columns)
 
     # Training with optional LOO cross validation
     if not tune:
@@ -213,7 +215,7 @@ def run_train(meldir      : List[str],
             f.write(report_text)
 
     # save model
-    io.save_model(basename, clf, threshold)
+    io.save_model(basename, clf, feature_columns, threshold)
 
 
 def run_classify(meldir     : str,
@@ -412,6 +414,17 @@ def setup_logging(logfile):
 
 def main(argv=None):
 
+    def load_feature_columns(filename):
+        # --feature_columns is expected to be a plain
+        # text file with a column label on each line
+        with open(filename, 'rt') as f:
+            cols = f.readlines()
+
+        cols = [c.strip() for c in cols]
+        cols = [c for c in cols if c != '']
+
+        return cols
+
     # options passed to all ArgumentParser objects
     opts = {'add_help'     : False,
             'allow_abbrev' : False}
@@ -454,6 +467,9 @@ def main(argv=None):
     train_parser.add_argument('-m', '--model_class')
     train_parser.add_argument('-n', '--n_trials', type=int,
                               default=100)
+    train_parser.add_argument('-f', '--feature_columns',
+                              type=load_feature_columns)
+    train_parser.add_argument('-', '--tr', type=float)
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
@@ -462,6 +478,8 @@ def main(argv=None):
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
                                  nargs='?')
+    classify_parser.add_argument('-f', '--feature_columns',
+                                 type=load_feature_columns)
 
     # EVALUATE parser
     def parse_thresholds(thresholds):
@@ -473,6 +491,8 @@ def main(argv=None):
     eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
                              default='1,2,5,10,20,30,40,50',
                              type=parse_thresholds)
+    eval_parser.add_argument('-f', '--feature_columns',
+                             type=load_feature_columns)
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(**opts)
@@ -514,10 +534,10 @@ def main(argv=None):
 
     # allow built-in models to be selected by
     # name, and auto-load associated settings
-    if hasattr(args, 'model') and not op.exists(args.model):
-        model      = load_builtin_model(model)
+    if hasattr(args, 'model') and (not op.exists(args.model)):
+        model      = load_builtin_model(args.model)
         args.model = model['file']
-        if args.species is not None:
+        if args.species is None:
             args.species = model.get('species')
 
     setup_logging(args.logfile)

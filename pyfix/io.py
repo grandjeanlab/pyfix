@@ -188,7 +188,7 @@ def load_motion_parameters(fname):
     return mp
 
 
-def save_model(fname, model, threshold=None):
+def save_model(fname, model, features, threshold=None):
     """Save a pyFIX model to file.
 
     Args:
@@ -202,6 +202,28 @@ def save_model(fname, model, threshold=None):
     Saved pyfix model files are *not* guaranteed to be forward-compatible -
     i.e. a model file saved with a particular pyfix version is not guaranteed
     to work with an older version of pyfix.
+
+    Pyfix 0.5.0
+    -----------
+
+    Pyfix models are saved in the same manner as Pyfix 0.4.0 models, but with
+    an additional field called "features":
+
+        {
+            "pyfix_version"   : "<pyfix-version>",
+            "sklearn_version" : "<sklearn-version>",
+            "xgboost_version" : "<xgboost-version>",
+            "features"        : ["<featurelist>"],
+            "model_type"      : "<model-type>",
+            "model_contents"  : "<model-contents>",
+            "model_threshold" : "<model-threshold>"  # optional
+        }
+
+    where:
+
+      - "<featurelist>" is a JSON list containing the names of all pyfix
+        features that were used to train the model.
+
 
     Pyfix 0.4.0
     -----------
@@ -284,6 +306,7 @@ def save_model(fname, model, threshold=None):
         'pyfix_version'   : pyfix.__version__,
         'sklearn_version' : sklearn.__version__,
         'xgboost_version' : getattr(xgboost, '__version__', ''),
+        'features'        : features,
         'model_type'      : model_type,
         'model_contents'  : dumped_model,
     }
