@@ -233,6 +233,7 @@ class FixData:
         fixdir  = indir.fixdir
         intree  = indir.input_tree
         fixtree = indir.fix_tree
+        species = indir.species
         indir   = indir.indir
 
         os.makedirs(fixdir, exist_ok=True)
@@ -329,7 +330,7 @@ class FixData:
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
-            species=indir.species,
+            species=species,
             input_tree=intree,
             fix_tree=fixtree
         )
