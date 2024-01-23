@@ -160,7 +160,7 @@ def run_feature_extraction(meldir     : str,
 
     # save features (pyfix and legacy-fix formats)
     f.to_csv(d.fix_tree.get('pyfix_features'), index=None)
-    legacy.save_features(d.fix_tree.get('legacy_features'), f)
+    io.save_features(d.fix_tree.get('legacy_features'), f)
 
 
 def run_train(meldir          : List[str],
@@ -238,7 +238,7 @@ def run_classify(meldir     : str,
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    features0 = legacy.read_features(fixtree.get('legacy_features'))
+    features0 = io.read_features(fixtree.get('legacy_features'))
 
     clf, saved_threshold = io.load_model(model)
     ypb                  = classify.classify(features0, clf)[1]

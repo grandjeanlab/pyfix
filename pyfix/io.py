@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import              base64
+import              csv
 import functools as ft
 import              io
 import              json
@@ -13,7 +14,7 @@ import              tempfile
 import              warnings
 
 from dataclasses import dataclass
-from typing      import Tuple
+from typing      import List
 
 import            joblib
 import nibabel as nb
@@ -22,7 +23,8 @@ import pandas  as pd
 import            sklearn
 
 from fsl.data import fixlabels
-from pyfix    import legacy
+from pyfix    import (legacy,
+                      feature)
 
 # InconsistentVersionWarning was added in sklearn 1.3.0
 try:
@@ -42,7 +44,7 @@ xgboost = weak_import('xgboost')
 log = logging.getLogger(__name__)
 
 
-def read_file_table(filename):
+def read_file_table(filename : str) -> pd.DataFrame:
     """Read a table of files for training.
 
     Args:
@@ -54,7 +56,7 @@ def read_file_table(filename):
     return pd.read_csv(filename, index_col=None)
 
 
-def save_file_table(filename, tbl):
+def save_file_table(filename : str, tbl : pd.DataFrame):
     """
     Save pyFIX features to a file
     """
@@ -141,13 +143,13 @@ class InputDirectory:
 
         features = self.fix_tree.get('legacy_features')
         if op.exists(features):
-            features = legacy.read_features(features)
+            features = read_features(features)
             return features['nic'].loc[0]
 
         raise RuntimeError(f'Cannot determine nics for {self.input_dir}')
 
 
-def load_motion_parameters(fname):
+def load_motion_parameters(fname : str) -> pd.DataFrame:
     """Load motion parameters from one of:
       - MCFLIRT output files
       - eddy output files
@@ -417,12 +419,13 @@ def load_model(fname):
 
 
 def generate_label_filename(meldir, modelfile, threshold):
+    """Create a FIX/melview-style file name for storing IC labels. """
     model     = op.splitext(op.basename(modelfile))[0]
     threshold = int(threshold)
     return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
 
 
-def read_labels(filename: str, nics : int = None):
+def read_labels(filename: str, nics : int = None) -> np.ndarray:
     """Read legacy label files, melview and hand_labels_noise.txt.
 
     If nics is None, a sequence of one-indexed noise IC labels is returned.
@@ -440,3 +443,78 @@ def read_labels(filename: str, nics : int = None):
         labels[indices - 1] = 1
 
     return labels
+
+
+def read_features(path: str, columns : List[str] = None):
+    """Read legacy FIX features from file.
+
+    Args:
+        path (str):     Path to feature file
+        columns (list): List of column names - defaults to
+                        FEATURE_LABELS
+
+    Returns:
+        features table (pd.DataFrame):
+    """
+
+    log.debug(f'Loading feature file {path}')
+
+    with open(path, 'rt') as f:
+        data = f.read()
+
+    # do we have column names?
+    header = csv.Sniffer().has_header(data)
+    ncols  = len(data.split('\n')[0].split(','))
+
+    # If columns have been provided, we assume
+    # that the user knows what they're doing.
+    if columns is not None:
+        header = 0 if header else None
+
+        log.debug('Expecting a custom set of {len(columns)} columns')
+
+    else:
+        # Otherwise, if the file has no header,
+        # we assume it has FEATURE_LABELS columns
+        if not header:
+            columns = feature.FEATURE_LABELS
+            header  = None
+            log.debug(f'Expecting all {len(columns)} '
+                      'pyfix {__version__} columns')
+
+        # otherwise the file contains column labels
+        else:
+            header = 0
+            log.debug(f'Expecting a subset of pyfix '
+                      '{__version__} columns')
+
+    df = pd.read_csv(io.StringIO(data), header=header, names=columns)
+
+    if columns is None:
+        columns = df.columns
+
+    if len(columns) != ncols:
+        msg = (f'Feature file {path} contains an unexpected '
+               'number of columns! Expected {len(columns)} '
+               'columns, but the file contains {ncols} columns')
+        log.error(msg)
+        raise RuntimeError(msg)
+
+    # Convert legacy FIX labels into pyfix labels
+    df = df.rename(columns=legacy.LEGACY_FEATURE_LABELS)
+
+    for column in df.columns:
+        if column not in feature.FEATURE_LABELS:
+            log.warning(f'Unrecognised feature column in {path}: {column}')
+
+    for column in feature.FEATURE_LABELS:
+        if column not in df.columns:
+            log.warning(f'Missing feature column in {path}: {column}')
+
+    return df
+
+
+def save_features(path : str, features : pd.DataFrame):
+    """Save legacy FIX features to file."""
+    features[feature.FEATURE_LABELS].to_csv(
+        path, index=None, header=None)
