@@ -155,7 +155,7 @@ def run_feature_extraction(meldir     : str,
     # extract legacy features
     f = extract.extract_features(
         data=d,
-        features=legacy.LEGACY_FEATURE_EXTRACTORS)
+        features=legacy.FEATURE_EXTRACTORS)
 
     # save features (pyfix and legacy-fix formats)
     f.to_csv(d.fix_tree.get('pyfix_features'), index=None)

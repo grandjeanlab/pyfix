@@ -8,6 +8,7 @@ import os.path  as     op
 import pandas   as     pd
 import numpy    as     np
 from   fsl.data import fixlabels
+from   pyfix    import __version__
 
 
 log = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ log = logging.getLogger(__name__)
 #         return [1,2,3]
 #
 # will result in myfeature:0, myfeature:1, myfeature:2
-LEGACY_FEATURE_LABELS = [
+FEATURE_LABELS = [
     'nic',
     *[f'arvswgn:{i}' for i in np.arange(2)],
     *[f'arfull:{i}' for i in np.arange(5)],
@@ -51,7 +52,7 @@ LEGACY_FEATURE_LABELS = [
     *[f'pixdim:{i}' for i in np.arange(4)],
 ]
 
-LEGACY_FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in LEGACY_FEATURE_LABELS]))
+FEATURE_EXTRACTORS = list(np.unique([f.split(':')[0] for f in FEATURE_LABELS]))
 
 
 def read_features(path: str, columns : List[str] = None):
@@ -60,40 +61,60 @@ def read_features(path: str, columns : List[str] = None):
     Args:
         path (str):     Path to feature file
         columns (list): List of column names - defaults to
-                        LEGACY_FEATURE_LABELS
+                        FEATURE_LABELS
 
     Returns:
         features table (pd.DataFrame):
     """
+
+    log.debug(f'Loading feature file {path}')
 
     with open(path, 'rt') as f:
         data = f.read()
 
     # do we have column names?
     header = csv.Sniffer().has_header(data)
+    ncols  = len(data.split('\n')[0].split(','))
 
     # If columns have been provided, we assume
     # that the user knows what they're doing.
     if columns is not None:
         header = 0 if header else None
 
+        log.debug('Expecting a custom set of {len(columns)} columns')
+
     else:
         # Otherwise, if the file has no header,
         # we assume it has FEATURE_LABELS columns
         if not header:
-            columns = LEGACY_FEATURE_LABELS
+            columns = FEATURE_LABELS
             header  = None
+            log.debug(f'Expecting all {len(columns)} '
+                      'pyfix {__version__} columns')
 
         # otherwise the file contains column labels
         else:
             header = 0
+            log.debug(f'Expecting a subset of pyfix '
+                      '{__version__} columns')
 
     df = pd.read_csv(io.StringIO(data), header=header, names=columns)
 
+    if columns is None:
+        columns = df.columns
+
+    if len(columns) != ncols:
+        msg = (f'Feature file {path} contains an unexpected '
+               'number of columns! Expected {len(columns)} '
+               'columns, but the file contains {ncols} columns')
+        log.error(msg)
+        raise RuntimeError(msg)
+
     for column in df.columns:
-        if column not in LEGACY_FEATURE_LABELS:
+        if column not in FEATURE_LABELS:
             log.warning(f'Unrecognised feature column in {path}: {column}')
-    for column in LEGACY_FEATURE_LABELS:
+
+    for column in FEATURE_LABELS:
         if column not in df.columns:
             log.warning(f'Missing feature column in {path}: {column}')
 
@@ -105,7 +126,7 @@ def save_features(path : str, features : pd.DataFrame):
     Save legacy FIX features to file.
     """
 
-    features[LEGACY_FEATURE_LABELS].to_csv(
+    features[FEATURE_LABELS].to_csv(
         path, index=None, header=None)
 
 
