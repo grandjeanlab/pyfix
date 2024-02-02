@@ -16,26 +16,25 @@ import              warnings
 from dataclasses import dataclass
 from typing      import List
 
-import            joblib
-import nibabel as nb
-import numpy   as np
-import pandas  as pd
-import            sklearn
+import                  joblib
+import nibabel   as     nb
+import numpy     as     np
+import pandas    as     pd
+import                  sklearn
+from   file_tree import FileTree
+from   fsl.data  import fixlabels
 
-from fsl.data import fixlabels
-from pyfix    import (legacy,
-                      feature)
+import                    pyfix
+from   pyfix.util import (weak_import,
+                          get_resource)
+from   pyfix      import (legacy,
+                          feature)
 
 # InconsistentVersionWarning was added in sklearn 1.3.0
 try:
     from sklearn.exceptions import InconsistentVersionWarning
 except ImportError:
     InconsistentVersionWarning = UserWarning
-
-from file_tree import FileTree
-
-import pyfix
-from pyfix.util import weak_import, get_resource
 
 
 xgboost = weak_import('xgboost')
@@ -141,7 +140,7 @@ class InputDirectory:
         if op.exists(melic):
             return nb.load(melic).shape[3]
 
-        features = self.fix_tree.get('legacy_features')
+        features = self.fix_tree.get('features')
         if op.exists(features):
             features = read_features(features)
             return features['nic'].loc[0]
@@ -325,15 +324,16 @@ def save_model(fname, model, features, threshold=None):
 
 
 def load_model(fname):
-    """
-    Load pyFIX model. See save_model for important information on the
+    """Load pyFIX model. See save_model for important information on the
     pyfix model file format, and compatibility considerations.
 
     Args:
         fname: File to load
 
-    Returns:
+    Returns a tuple containing:
         - A model object, such as a sklearn or xgboost classifier.
+        - A list of feature labels denoting the pyfix features that
+          were used to train the classifier
         - An optimal probability threshold to use for classification,
           or None if an optimal threshold was not estimated.
     """
@@ -364,7 +364,7 @@ def load_model(fname):
 
                 model = joblib.load(fname)
 
-        return model, None
+        return model, feature.FEATURE_LABELS, None
 
     # pyfix >= 0.4.0 file - format as
     # described in the save_model docs.
@@ -375,9 +375,10 @@ def load_model(fname):
             f.seek(6)
             loaded = json.load(f)
 
-        mtype  = loaded['model_type']
-        mthres = loaded.get('model_threshold', None)
-        mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
+        mtype    = loaded['model_type']
+        mthres   = loaded.get('model_threshold', None)
+        features = loaded.get('features', feature.FEATURE_LABELS)
+        mdata    = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
         if mtype == 'xgboost':
 
@@ -405,7 +406,8 @@ def load_model(fname):
                                f'version of Pyfix ({pyfix.__version__}) '
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
-        return model, mthres
+
+        return model, features, mthres
 
     # Sniff the first few bytes of
     # the file to see what we have
@@ -451,7 +453,7 @@ def read_features(path: str, columns : List[str] = None):
     Args:
         path (str):     Path to feature file
         columns (list): List of column names - defaults to
-                        FEATURE_LABELS
+                        pyfix.feature.FEATURE_LABELS
 
     Returns:
         features table (pd.DataFrame):
@@ -515,5 +517,5 @@ def read_features(path: str, columns : List[str] = None):
 
 
 def save_features(path : str, features : pd.DataFrame):
-    """Save legacy FIX features to file."""
+    """Save FIX features to file."""
     features[feature.FEATURE_LABELS].to_csv(path, index=None)

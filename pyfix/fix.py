@@ -158,9 +158,8 @@ def run_feature_extraction(meldir     : str,
         data=d,
         features=sorted(feature.FEATURE_EXTRACTORS.keys()))
 
-    # save features (pyfix and legacy-fix formats)
-    f.to_csv(d.fix_tree.get('pyfix_features'), index=None)
-    io.save_features(d.fix_tree.get('legacy_features'), f)
+    # save features
+    io.save_features(d.fix_tree.get('features'), f)
 
 
 def run_train(meldir          : List[str],
@@ -238,13 +237,16 @@ def run_classify(meldir     : str,
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    features0 = io.read_features(fixtree.get('legacy_features'))
+    clf, feature_labels, saved_threshold = io.load_model(model)
 
-    clf, saved_threshold = io.load_model(model)
-    ypb                  = classify.classify(features0, clf)[1]
+    features0 = io.read_features(fixtree.get('features'))
+    features0 = features0[feature_labels]
+
+    ypb       = classify.classify(features0, clf)[1]
 
     if threshold is None:
         threshold = saved_threshold
+
     if threshold is None:
         raise RuntimeError('You must specify a probability threshold - '
                            f'{model} does not contain an optimal '
