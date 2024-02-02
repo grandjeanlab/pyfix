@@ -52,11 +52,18 @@ def get_mask(name : str, species : str = None) -> str:
     return op.join(get_resource_path(), 'masks', species, name)
 
 
-def load_builtin_model(name : str) -> dict:
-    info = op.join(get_resource_path(), 'models', 'info.json')
+def get_builtin_model(name : str) -> dict:
+
+    modelpath = op.join(get_resource_path(), 'models')
+    info      = op.join(modelpath, 'info.json')
+
     with open(info, 'rt') as f:
         info = json.loads(f.read())
-    return info[name]
+
+    info         = info[name]
+    info['file'] = op.join(modelpath, info['file'])
+
+    return info
 
 
 def create_mask(dseg: str,

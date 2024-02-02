@@ -34,7 +34,7 @@ from pyfix      import (extract,
                         __version__)
 from pyfix.util import (weak_import,
                         get_resource,
-                        load_builtin_model,
+                        get_builtin_model,
                         list_models)
 
 
@@ -460,6 +460,7 @@ def main(argv=None):
     feature_parser = argparse.ArgumentParser(**opts)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
     feature_parser.add_argument('-o', '--outdir')
+    feature_parser.add_argument('-s', '--species')
 
     # TRAIN parser
     train_parser = argparse.ArgumentParser(**opts)
@@ -481,6 +482,7 @@ def main(argv=None):
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
                                  nargs='?')
+    classify_parser.add_argument('-s', '--species')
     classify_parser.add_argument('-f', '--feature_columns',
                                  type=load_feature_columns)
 
@@ -490,6 +492,7 @@ def main(argv=None):
 
     eval_parser = argparse.ArgumentParser(**opts)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
+    eval_parser.add_argument('-s', '--species')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
     eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
                              default='1,2,5,10,20,30,40,50',
@@ -538,7 +541,7 @@ def main(argv=None):
     # allow built-in models to be selected by
     # name, and auto-load associated settings
     if hasattr(args, 'model') and (not op.exists(args.model)):
-        model      = load_builtin_model(args.model)
+        model      = get_builtin_model(args.model)
         args.model = model['file']
         if args.species is None:
             args.species = model.get('species')
