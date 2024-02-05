@@ -473,7 +473,7 @@ def read_features(path: str, columns : List[str] = None):
     if columns is not None:
         header = 0 if header else None
 
-        log.debug('Expecting a custom set of {len(columns)} columns')
+        log.debug(f'Expecting a custom set of {len(columns)} columns')
 
     else:
         # Otherwise, if the file has no header,
@@ -481,14 +481,14 @@ def read_features(path: str, columns : List[str] = None):
         if not header:
             columns = feature.FEATURE_LABELS
             header  = None
-            log.debug(f'Expecting all {len(columns)} '
-                      'pyfix {__version__} columns')
+            log.debug(f'Expecting all {len(columns)} pyfix '
+                      f'{pyfix.__version__} columns')
 
         # otherwise the file contains column labels
         else:
             header = 0
             log.debug(f'Expecting a subset of pyfix '
-                      '{__version__} columns')
+                      f'{pyfix.__version__} columns')
 
     df = pd.read_csv(io.StringIO(data), header=header, names=columns)
 
@@ -497,8 +497,8 @@ def read_features(path: str, columns : List[str] = None):
 
     if len(columns) != ncols:
         msg = (f'Feature file {path} contains an unexpected '
-               'number of columns! Expected {len(columns)} '
-               'columns, but the file contains {ncols} columns')
+               f'number of columns! Expected {len(columns)} '
+               f'columns, but the file contains {ncols} columns')
         log.error(msg)
         raise RuntimeError(msg)
 
@@ -516,6 +516,9 @@ def read_features(path: str, columns : List[str] = None):
     return df
 
 
-def save_features(path : str, features : pd.DataFrame):
+def save_features(path     : str,
+                  features : pd.DataFrame,
+                  header   : bool = True):
     """Save FIX features to file."""
-    features[feature.FEATURE_LABELS].to_csv(path, index=None)
+    labels = [f for f in feature.FEATURE_LABELS if f in features.columns]
+    features[labels].to_csv(path, index=None, header=header)
