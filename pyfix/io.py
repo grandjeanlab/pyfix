@@ -14,7 +14,7 @@ import              tempfile
 import              warnings
 
 from dataclasses import dataclass
-from typing      import List
+from typing      import List, Any
 
 import                  joblib
 import nibabel   as     nb
@@ -185,12 +185,89 @@ def load_motion_parameters(fname : str) -> pd.DataFrame:
     return mp
 
 
-def save_model(fname, model, features, threshold=None):
+@dataclass
+class Model:
+    """Class which represents a pyfix model, used by save_model and load_model.
+    This class is just a container with a reference to an xgboost/sklearn
+    classifier, and information needed to use it.
+    """
+
+    model : Any
+    """A classifier object, such as a sklearn or xgboost classifier. """
+
+    features : List[str]
+    """A list of feature labels denoting the pyfix features that were used to
+    train the classifier.
+    """
+
+    species : str
+    """Species the model was trained on. At the moment this simply determines
+    which set of mask images were used in feature extraction.
+    """
+
+    threshold : float = None
+    """An optimal probability threshold to use for classification,
+    or None if an optimal threshold was not estimated.
+    """
+
+    def __init__(self,
+                 model     : Any,
+                 features  : List[str] = None,
+                 species   : str       = None,
+                 threshold : float     = None):
+        """Create a Model object. """
+
+        if features is None:
+            features = list(feature.FEATURE_LABELS)
+
+        if species in (None, ''):
+            species = 'mni152_1mm'
+
+        super().__init__(model, features, species, threshold)
+
+
+    @property
+    def model_type(self) -> str:
+        """Return a string identifier for the model, either 'xgboost' or
+        'sklearn'.
+        """
+
+        if (xgboost is not None) and \
+           isinstance(self.model, xgboost.XGBClassifier):
+            return 'xgboost'
+        elif isinstance(self.model, sklearn.base.ClassifierMixin):
+            return 'sklearn'
+        else:
+            raise RuntimeError(f'Unknown model type {type(self.model)}')
+
+
+    def dump_model(self) -> bytes:
+        """Return a binary representation of the classifier object. """
+
+        if self.model_type == 'xgboost':
+            # xgboost.save_model doesn't have the
+            # ability to dump to memory, so we save
+            # to a temp file and read it back in
+            with tempfile.TemporaryDirectory() as tdir:
+                tmpfile = op.join(tdir, 'model.json')
+                self.model.save_model(tmpfile)
+                with open(tmpfile, 'rb') as f:
+                    dumped_model = f.read()
+
+        elif self.model_type == 'sklearn':
+            with io.BytesIO() as f:
+                joblib.dump(self.model, f)
+                dumped_model = f.getvalue()
+
+        return dumped_model
+
+
+def save_model(fname : str, model : Model):
     """Save a pyFIX model to file.
 
     Args:
         fname: file to which the model should be saved
-        model: model to save
+        model: Model to save
 
     Note that the pyfix model file format is subject to change without notice
     between versions. However, the developers strive to guarantee backwards-
@@ -204,13 +281,14 @@ def save_model(fname, model, features, threshold=None):
     -----------
 
     Pyfix models are saved in the same manner as Pyfix 0.4.0 models, but with
-    an additional field called "features":
+    two additional fields, called "features" and "species":
 
         {
             "pyfix_version"   : "<pyfix-version>",
             "sklearn_version" : "<sklearn-version>",
             "xgboost_version" : "<xgboost-version>",
             "features"        : ["<featurelist>"],
+            "species"         : "<data-species>",
             "model_type"      : "<model-type>",
             "model_contents"  : "<model-contents>",
             "model_threshold" : "<model-threshold>"  # optional
@@ -220,7 +298,8 @@ def save_model(fname, model, features, threshold=None):
 
       - "<featurelist>" is a JSON list containing the names of all pyfix
         features that were used to train the model.
-
+      - "<data-species>" is a species identifier, e.g "mni152_1mm", "macaque",
+        etc.
 
     Pyfix 0.4.0
     -----------
@@ -277,38 +356,22 @@ def save_model(fname, model, features, threshold=None):
     if not fname.endswith('.pyfix_model'):
         fname = fname + '.pyfix_model'
 
-    if (xgboost is not None) and isinstance(model, xgboost.XGBClassifier):
-        model_type = 'xgboost'
-        # xgboost.save_model doesn't have the
-        # ability to dump to memory, so we save
-        # to a temp file and read it back in
-        with tempfile.TemporaryDirectory() as tdir:
-            tmpfile = op.join(tdir, 'model.json')
-            model.save_model(tmpfile)
-            with open(tmpfile, 'rb') as f:
-                dumped_model = f.read()
-
-    elif isinstance(model, sklearn.base.ClassifierMixin):
-        model_type = 'sklearn'
-        with io.BytesIO() as f:
-            joblib.dump(model, f)
-            dumped_model = f.getvalue()
-
     else:
         raise RuntimeError(f'Unsupported model {type(model)}! Pyfix only '
                            'recognises scikit-learn or xgboost classifiers')
 
-    dumped_model = base64.b64encode(dumped_model).decode()
+    dumped_model = base64.b64encode(model.dump_model()).decode()
     to_save      = {
         'pyfix_version'   : pyfix.__version__,
         'sklearn_version' : sklearn.__version__,
         'xgboost_version' : getattr(xgboost, '__version__', ''),
-        'features'        : features,
-        'model_type'      : model_type,
+        'features'        : model.features,
+        'species'         : model.species,
+        'model_type'      : model.model_type,
         'model_contents'  : dumped_model,
     }
-    if threshold is not None:
-        to_save['model_threshold'] = threshold
+    if model.threshold is not None:
+        to_save['model_threshold'] = model.threshold
 
     if op.exists(fname):
         log.warning(f'Model file already exists - overwriting: {fname}')
@@ -323,19 +386,14 @@ def save_model(fname, model, features, threshold=None):
         json.dump(to_save, f)
 
 
-def load_model(fname):
+def load_model(fname : str) -> Model:
     """Load pyFIX model. See save_model for important information on the
     pyfix model file format, and compatibility considerations.
 
     Args:
         fname: File to load
 
-    Returns a tuple containing:
-        - A model object, such as a sklearn or xgboost classifier.
-        - A list of feature labels denoting the pyfix features that
-          were used to train the classifier
-        - An optimal probability threshold to use for classification,
-          or None if an optimal threshold was not estimated.
+    Returns a Model object
     """
 
     sklearn_warning = (
@@ -364,7 +422,7 @@ def load_model(fname):
 
                 model = joblib.load(fname)
 
-        return model, feature.FEATURE_LABELS, None
+        return Model(model, feature.FEATURE_LABELS, None, None)
 
     # pyfix >= 0.4.0 file - format as
     # described in the save_model docs.
@@ -377,6 +435,7 @@ def load_model(fname):
 
         mtype    = loaded['model_type']
         mthres   = loaded.get('model_threshold', None)
+        species  = loaded.get('species', None)
         features = loaded.get('features', feature.FEATURE_LABELS)
         mdata    = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
@@ -407,7 +466,7 @@ def load_model(fname):
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
 
-        return model, features, mthres
+        return Model(model, features, species, mthres)
 
     # Sniff the first few bytes of
     # the file to see what we have

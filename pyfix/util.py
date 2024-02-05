@@ -47,7 +47,7 @@ def list_models() -> List[str]:
 
 
 def get_mask(name : str, species : str = None) -> str:
-    if species is None:
+    if species in (None, 'mni152_1mm'):
         species = ''
     return op.join(get_resource_path(), 'masks', species, name)
 
