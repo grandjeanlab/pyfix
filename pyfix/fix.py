@@ -471,6 +471,7 @@ def main(argv=None):
     train_parser.add_argument('-m', '--model_class')
     train_parser.add_argument('-n', '--n_trials', type=int,
                               default=100)
+    train_parser.add_argument('-s', '--species')
     train_parser.add_argument('-f', '--feature_columns',
                               type=load_feature_columns)
     train_parser.add_argument('-', '--tr', type=float)
@@ -482,9 +483,6 @@ def main(argv=None):
     classify_parser.add_argument('model', metavar='<training.pyfix_model>')
     classify_parser.add_argument('threshold', metavar='<thresh>', type=int,
                                  nargs='?')
-    classify_parser.add_argument('-s', '--species')
-    classify_parser.add_argument('-f', '--feature_columns',
-                                 type=load_feature_columns)
 
     # EVALUATE parser
     def parse_thresholds(thresholds):
@@ -492,7 +490,6 @@ def main(argv=None):
 
     eval_parser = argparse.ArgumentParser(**opts)
     eval_parser.add_argument('model', metavar='<training.pyfix_model>')
-    eval_parser.add_argument('-s', '--species')
     eval_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
     eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
                              default='1,2,5,10,20,30,40,50',
