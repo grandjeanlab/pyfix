@@ -9,6 +9,14 @@ import            sys
 import            zipfile
 
 
+DATADIR              = op.join(op.dirname(__file__), 'testdata')
+DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
+FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
+TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
+TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
+CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
+
+
 class CaptureStdout:
     """Context manager which captures stdout and stderr. """
 
