@@ -210,8 +210,12 @@ class Model:
     or None if an optimal threshold was not estimated.
     """
 
+    filename : str = None
+    """File this model was loaded from. May be None. """
+
     def __init__(self,
                  model     : Any,
+                 filename  : str       = None,
                  features  : List[str] = None,
                  species   : str       = None,
                  threshold : float     = None):
@@ -223,7 +227,7 @@ class Model:
         if species in (None, ''):
             species = 'mni152_1mm'
 
-        super().__init__(model, features, species, threshold)
+        super().__init__(model, features, species, threshold, filename)
 
 
     @property
@@ -385,6 +389,8 @@ def save_model(fname : str, model : Model):
         f.write('PYFIX\n')
         json.dump(to_save, f)
 
+    model.filename = fname
+
 
 def load_model(fname : str) -> Model:
     """Load pyFIX model. See save_model for important information on the
@@ -422,7 +428,7 @@ def load_model(fname : str) -> Model:
 
                 model = joblib.load(fname)
 
-        return Model(model, feature.FEATURE_LABELS, None, None)
+        return Model(model, None, None, None, fname)
 
     # pyfix >= 0.4.0 file - format as
     # described in the save_model docs.
@@ -466,7 +472,7 @@ def load_model(fname : str) -> Model:
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
 
-        return Model(model, features, species, mthres)
+        return Model(model, features, species, mthres, fname)
 
     # Sniff the first few bytes of
     # the file to see what we have
