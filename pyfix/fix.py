@@ -166,6 +166,7 @@ def run_train(meldir          : List[str],
               basename        : str,
               model_class     : str  = None,
               feature_columns : str  = None,
+              species         : str  = None,
               loo             : bool = False,
               tune            : bool = False,
               n_jobs          : int  = None,
@@ -215,7 +216,8 @@ def run_train(meldir          : List[str],
             f.write(report_text)
 
     # save model
-    io.save_model(basename, clf, feature_columns, threshold)
+    model = io.Model(clf, feature_columns, species,  threshold)
+    io.save_model(basename, model)
 
 
 def run_classify(meldir     : str,
@@ -237,19 +239,18 @@ def run_classify(meldir     : str,
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    clf, feature_labels, saved_threshold = io.load_model(model)
+    model     = io.load_model(model)
+    features0 = io.read_features(fixtree.get('features'), model.features)
+    features0 = features0[model.features]
 
-    features0 = io.read_features(fixtree.get('features'))
-    features0 = features0[feature_labels]
-
-    ypb       = classify.classify(features0, clf)[1]
+    ypb       = classify.classify(features0, model.model)[1]
 
     if threshold is None:
-        threshold = saved_threshold
+        threshold = model.threshold
 
     if threshold is None:
         raise RuntimeError('You must specify a probability threshold - '
-                           f'{model} does not contain an optimal '
+                           f'{model.filename} does not contain an optimal '
                            'threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
@@ -259,9 +260,8 @@ def run_classify(meldir     : str,
     # (as per legacy fix4melview files)
     y          = ~y
     labels     = [['Noise'] if i else ['Signal'] for i in y]
-    modelname  = op.splitext(op.basename(model))[0]
     label_file = intree \
-                   .update(threshold=threshold, model=modelname) \
+                   .update(threshold=threshold, model=model.name) \
                    .get('fix_labels')
     fixlabels.saveLabelFile(labels, label_file, meldir)
 

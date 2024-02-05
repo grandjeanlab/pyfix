@@ -215,20 +215,34 @@ class Model:
 
     def __init__(self,
                  model     : Any,
-                 filename  : str       = None,
                  features  : List[str] = None,
                  species   : str       = None,
-                 threshold : float     = None):
+                 threshold : float     = None,
+                 filename  : str       = None):
         """Create a Model object. """
 
         if features is None:
-            features = list(feature.FEATURE_LABELS)
+            features = feature.FEATURE_LABELS
 
         if species in (None, ''):
             species = 'mni152_1mm'
 
-        super().__init__(model, features, species, threshold, filename)
+        self.model     = model
+        self.features  = list(features)
+        self.species   = species
+        self.threshold = threshold
+        self.filename  = filename
 
+
+    @property
+    def name(self):
+        """Return a name for this Model generated from the saved file,
+        or "none" if it is not saved.
+        """
+        if self.filename is None:
+            return 'none'
+        else:
+            return op.splitext(op.basename(self.filename))[0]
 
     @property
     def model_type(self) -> str:
@@ -242,7 +256,9 @@ class Model:
         elif isinstance(self.model, sklearn.base.ClassifierMixin):
             return 'sklearn'
         else:
-            raise RuntimeError(f'Unknown model type {type(self.model)}')
+            raise RuntimeError(
+                f'Unsupported model {type(model)}! Pyfix only '
+                'recognises scikit-learn or xgboost classifiers')
 
 
     def dump_model(self) -> bytes:
@@ -360,10 +376,6 @@ def save_model(fname : str, model : Model):
     if not fname.endswith('.pyfix_model'):
         fname = fname + '.pyfix_model'
 
-    else:
-        raise RuntimeError(f'Unsupported model {type(model)}! Pyfix only '
-                           'recognises scikit-learn or xgboost classifiers')
-
     dumped_model = base64.b64encode(model.dump_model()).decode()
     to_save      = {
         'pyfix_version'   : pyfix.__version__,
@@ -477,7 +489,7 @@ def load_model(fname : str) -> Model:
     # Sniff the first few bytes of
     # the file to see what we have
     with open(fname, 'rb') as f:
-         header = f.read(6)
+        header = f.read(6)
 
     if header == b'PYFIX\n':
         return load_new_pyfix_model_file()
