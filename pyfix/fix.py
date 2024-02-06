@@ -141,6 +141,7 @@ def assert_has_hand_labels(meldir):
 
 
 def run_feature_extraction(meldir     : str,
+                           species    : str = None,
                            input_tree : str = None,
                            fix_tree   : str = None,
                            outdir     : str = None,
@@ -150,7 +151,7 @@ def run_feature_extraction(meldir     : str,
 
     # instantiate FixData object
     indir = io.InputDirectory.from_input_dir(
-        meldir, input_tree, fix_tree, outdir)
+        meldir, input_tree, fix_tree, outdir, species)
     d     = extract.FixData.from_input_dir(indir)
 
     # extract legacy features
@@ -216,7 +217,7 @@ def run_train(meldir          : List[str],
             f.write(report_text)
 
     # save model
-    model = io.Model(clf, feature_columns, species,  threshold)
+    model = io.Model(clf, feature_columns, species, threshold)
     io.save_model(basename, model)
 
 
@@ -540,8 +541,6 @@ def main(argv=None):
     if hasattr(args, 'model') and (not op.exists(args.model)):
         model      = get_builtin_model(args.model)
         args.model = model['file']
-        if args.species is None:
-            args.species = model.get('species')
 
     setup_logging(args.logfile)
 
