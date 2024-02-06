@@ -31,3 +31,8 @@ associated settings.
  - UKBiobank.pyfix_model: derived from fairly HCP-like scanning in the UK
    Biobank imaging study: 40 subjects, TR=0.735s, Resolution=2.4x2.4x2.4mm,
    Session=6mins, no spatial smoothing, 100s FWHM highpass temporal filtering.
+
+ - NHPHCP_Macaque_RIKEN30SRFIX.pyfix_model: derived from NHP-HCP Macaque data,
+   using multiband x5 EPI acceleration: TR=0.76s, Resolution:1.25x1.25x1.25mm,
+   Session=102min, no spatial smoothing, minimal (2000s FWHM) highpass
+   temporal filtering.

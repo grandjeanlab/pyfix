@@ -17,8 +17,7 @@
     "HCP7T_hp2000" : {
         "file" : "HCP7T_hp2000.pyfix_model"
     },
-    "Macaque" : {
-        "file"    : "___TODO__NCPHCP_Macaque.pyfix_model",
-        "species" : "Macaque"
+    "NHP_HCP_Macaque" : {
+        "file" : "NCPHCP_Macaque_RIKEN30SRFIX.pyfix_model"
     }
 }
