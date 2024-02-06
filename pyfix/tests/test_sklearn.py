@@ -11,11 +11,8 @@ import shlex
 from fsl.utils.tempdir import tempdir
 from pyfix             import fix
 from pyfix.tests       import (unzip,
+                               main,
                                TRAINDATA_ARCHIVE)
-
-
-def main(cmd=''):
-    return fix.main(shlex.split(cmd))
 
 
 def test_sklearn_train_classify():

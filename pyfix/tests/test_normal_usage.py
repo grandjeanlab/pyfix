@@ -23,7 +23,8 @@ from pyfix              import (fix,
                                 io,
                                 feature,
                                 legacy)
-from pyfix.tests        import (unzip,
+from pyfix.tests        import (main,
+                                unzip,
                                 indir,
                                 DATADIR,
                                 DATA_ARCHIVE,
@@ -31,10 +32,6 @@ from pyfix.tests        import (unzip,
                                 TRAINDATA_ARCHIVE,
                                 TRAINED_MODEL,
                                 CLEANED_DATA_ARCHIVE)
-
-
-def main(cmd=''):
-    return fix.main(shlex.split(cmd))
 
 
 def compare_arrays(got, exp, err=0.01):

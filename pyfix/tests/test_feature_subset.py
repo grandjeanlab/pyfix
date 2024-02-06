@@ -16,12 +16,9 @@ import pytest
 from pyfix import (feature,
                    fix,
                    io)
-from .     import (unzip,
+from .     import (main,
+                   unzip,
                    TRAINDATA_ARCHIVE)
-
-
-def main(cmd=''):
-    return fix.main(shlex.split(cmd))
 
 
 def generate_feature_subset_data():

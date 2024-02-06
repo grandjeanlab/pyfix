@@ -8,6 +8,8 @@ import            shlex
 import            sys
 import            zipfile
 
+from pyfix import fix
+
 
 DATADIR              = op.join(op.dirname(__file__), 'testdata')
 DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
@@ -98,3 +100,7 @@ def indir(path):
         yield
     finally:
         os.chdir(cwd)
+
+
+def main(cmd=''):
+    return fix.main(shlex.split(cmd))
