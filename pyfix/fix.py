@@ -219,6 +219,7 @@ def run_train(meldir          : List[str],
     # save model
     model = io.Model(clf, feature_columns, species, threshold)
     io.save_model(basename, model)
+    return model
 
 
 def run_classify(meldir     : str,

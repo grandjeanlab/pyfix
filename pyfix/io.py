@@ -128,7 +128,8 @@ class InputDirectory:
         input_dir = op.abspath(input_dir)
         fix_dir   = op.abspath(fix_dir)
 
-        return InputDirectory(input_dir, fix_dir, input_tree, fix_tree, species)
+        return InputDirectory(
+            input_dir, fix_dir, input_tree, fix_tree, species)
 
 
     @property
@@ -282,7 +283,7 @@ class Model:
         return dumped_model
 
 
-def save_model(fname : str, model : Model):
+def save_model(fname : str, model : Model, version : str = None):
     """Save a pyFIX model to file.
 
     Args:
@@ -301,10 +302,11 @@ def save_model(fname : str, model : Model):
     -----------
 
     Pyfix models are saved in the same manner as Pyfix 0.4.0 models, but with
-    two additional fields, called "features" and "species":
+    three additional fields - "format_version", "features" and "species":
 
         {
             "pyfix_version"   : "<pyfix-version>",
+            "format_version"  : "<file-format-version>",
             "sklearn_version" : "<sklearn-version>",
             "xgboost_version" : "<xgboost-version>",
             "features"        : ["<featurelist>"],
@@ -316,6 +318,8 @@ def save_model(fname : str, model : Model):
 
     where:
 
+      - "<file-format-vesrion>" is a string containing the pyfix model
+        file format version, e.g. "0.5.0"
       - "<featurelist>" is a JSON list containing the names of all pyfix
         features that were used to train the model.
       - "<data-species>" is a species identifier, e.g "mni152_1mm", "macaque",
@@ -373,33 +377,53 @@ def save_model(fname : str, model : Model):
     guaranteed to work with the same scikit-learn version.
     """
 
+    if version is None:
+        version = '0.5.0'
+
+    if version not in ('0.3.0', '0.4.0', '0.5.0'):
+        raise ValueError(f'Unknown pyfix model file format version {version}')
+
+    if version != '0.5.0':
+        log.warning('Saving model with old file format '
+                    f'{version} - this is not recommended!')
+
     if not fname.endswith('.pyfix_model'):
         fname = fname + '.pyfix_model'
 
-    dumped_model = base64.b64encode(model.dump_model()).decode()
-    to_save      = {
-        'pyfix_version'   : pyfix.__version__,
-        'sklearn_version' : sklearn.__version__,
-        'xgboost_version' : getattr(xgboost, '__version__', ''),
-        'features'        : model.features,
-        'species'         : model.species,
-        'model_type'      : model.model_type,
-        'model_contents'  : dumped_model,
-    }
-    if model.threshold is not None:
-        to_save['model_threshold'] = model.threshold
+    fname = op.abspath(op.expanduser(fname))
 
     if op.exists(fname):
         log.warning(f'Model file already exists - overwriting: {fname}')
 
-    fdir = op.abspath(op.expanduser(op.dirname(fname)))
+    log.info(f'Saving trained model to: {fname}')
+
+    fdir = op.dirname(fname)
     if not op.exists(fdir):
         os.makedirs(fdir)
 
-    log.info(f'Saving trained model to: {fname}')
-    with open(fname, 'wt', encoding='utf-8') as f:
-        f.write('PYFIX\n')
-        json.dump(to_save, f)
+    if version == '0.3.0':
+        joblib.dump(model.model, fname)
+
+    else:
+        dumped_model = base64.b64encode(model.dump_model()).decode()
+        to_save      = {
+            'pyfix_version'   : pyfix.__version__,
+            'sklearn_version' : sklearn.__version__,
+            'xgboost_version' : getattr(xgboost, '__version__', ''),
+            'model_type'      : model.model_type,
+            'model_contents'  : dumped_model,
+        }
+        if model.threshold is not None:
+            to_save['model_threshold'] = model.threshold
+
+        if version == '0.5.0':
+            to_save['format_version'] = version
+            to_save['features']       = model.features
+            to_save['species']        = model.species
+
+        with open(fname, 'wt', encoding='utf-8') as f:
+            f.write('PYFIX\n')
+            json.dump(to_save, f)
 
     model.filename = fname
 
