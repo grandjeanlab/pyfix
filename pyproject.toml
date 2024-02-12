@@ -33,8 +33,7 @@ extra = [
 ]
 
 [project.scripts]
-fix     = "pyfix.fix:main"
-hcp_fix = "pyfix.hcpfix:main"
+fix = "pyfix.fix:main"
 
 [project.urls]
 "Repository" = "https://git.fmrib.ox.ac.uk/fsl/pyfix.git"
