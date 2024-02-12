@@ -5,7 +5,7 @@ import logging
 import multiprocessing as mp
 import os.path as op
 import importlib
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -85,31 +85,26 @@ def classify(feature_table, model):
     return y_pred, y_pred_pb
 
 
-def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, group_by=None):
+def collate_features(
+        table   : Union[str, pd.DataFrame],
+        columns : List[str] = None
+):
     if isinstance(table, str):
         table = io.read_file_table(table)
 
     assert {'features', 'labels'}.issubset(set(table.columns)), \
         'file table must contains columns called features and labels'
 
-    if group_by is not None:
-        group_vals = table[group_by]
-    else:
-        group_vals = table.index.values
+    group_vals = table.index.values
 
     N = table.shape[0]
     train_data = [None] * N
     for idx, (f0, l0, g0) in enumerate(zip(table.features, table.labels, group_vals)):
 
-        if legacy_features:
-            train_data[idx] = legacy.read_features(f0)
-        else:
-            train_data[idx] = pd.read_csv(f0)
+        train_data[idx] = io.read_features(f0, columns)
+        labels          = io.read_labels(l0, train_data[idx].shape[0])
 
         train_data[idx]['group'] = g0
-
-        labels = legacy.read_labels(l0, train_data[idx].shape[0])
-
         train_data[idx]['label'] = labels
 
     train_data = pd.concat(train_data).astype({'label': bool})
@@ -117,7 +112,11 @@ def collate_features(table: Union[str, pd.DataFrame], legacy_features=False, gro
     # invert train_data so that signal==True and noise==False
     train_data['label'] = ~train_data['label']
 
-    return train_data
+    columns = list(train_data.columns)
+    columns.remove('label')
+    columns.remove('group')
+
+    return train_data, columns
 
 
 def create_model(model_class=None, n_jobs=None, **params):

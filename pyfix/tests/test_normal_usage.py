@@ -21,21 +21,17 @@ from fsl.utils.tempdir  import tempdir
 
 from pyfix              import (fix,
                                 io,
+                                feature,
                                 legacy)
-from pyfix.tests        import (unzip,
-                                indir)
-
-
-DATADIR              = op.join(op.dirname(__file__), 'testdata')
-DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
-FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
-TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
-TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
-CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
-
-
-def main(cmd=''):
-    return fix.main(shlex.split(cmd))
+from pyfix.tests        import (main,
+                                unzip,
+                                indir,
+                                DATADIR,
+                                DATA_ARCHIVE,
+                                FIXDIR_ARCHIVE,
+                                TRAINDATA_ARCHIVE,
+                                TRAINED_MODEL,
+                                CLEANED_DATA_ARCHIVE)
 
 
 def compare_arrays(got, exp, err=0.01):
@@ -86,10 +82,10 @@ def test_feature_extraction():
 
         main('-f rest.ica')
 
-        got = legacy.read_features(op.join('rest.ica', 'fix', 'features.csv'))
-        exp = legacy.read_features(op.join(            'fix', 'features.csv'))
+        got = io.read_features(op.join('rest.ica', 'fix', 'features.csv'))
+        exp = io.read_features(op.join(            'fix', 'features.csv'))
 
-        for col in legacy.LEGACY_FEATURE_LABELS:
+        for col in feature.FEATURE_LABELS:
             gotcol = got[col]
             expcol = exp[col]
             if np.all(np.isclose(gotcol, expcol)):
@@ -138,7 +134,7 @@ def test_classify():
         main(f'-c {icadir} {TRAINED_MODEL} 30')
 
         model     = op.splitext(op.basename(TRAINED_MODEL))[0]
-        labelfile = legacy.generate_label_filename(icadir, TRAINED_MODEL, 30)
+        labelfile = io.generate_label_filename(icadir, TRAINED_MODEL, 30)
 
         assert op.exists(labelfile)
         loadLabelFile(labelfile)
@@ -151,7 +147,7 @@ def test_classify():
              f'{" ".join(icadirs)}')
 
         for icadir, threshold in  it.product(icadirs, thresholds):
-            labelfile = legacy.generate_label_filename(
+            labelfile = io.generate_label_filename(
                 icadir, TRAINED_MODEL, threshold)
             assert op.exists(labelfile)
 

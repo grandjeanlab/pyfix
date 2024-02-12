@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
+import contextlib
 import glob
+import json
 import logging
+import os
 import os.path as op
 
 from typing import List, Tuple
@@ -25,6 +28,23 @@ def assert_file_exists(*args):
             raise FileNotFoundError(f)
 
 
+@contextlib.contextmanager
+def indir(path):
+    """Context manager which changes into the given directory, yields,
+    then changes back.
+    """
+    cwd = os.getcwd()
+
+    if not op.exists(path):
+        os.makedirs(path, exist_ok=True)
+
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(cwd)
+
+
 def get_resource_path() -> str:
     rpath = op.realpath(
         op.join(op.dirname(op.abspath(__file__)), "resources"))
@@ -44,10 +64,24 @@ def list_models() -> List[str]:
     return sorted(modelfiles)
 
 
-def get_model_file(name) -> str:
-    f = op.join(get_resource_path(), 'models', f'{name}.pyfix_model')
-    assert_file_exists(f)
-    return f
+def get_mask(name : str, species : str = None) -> str:
+    if species in (None, 'mni152_1mm'):
+        species = ''
+    return op.join(get_resource_path(), 'masks', species, name)
+
+
+def get_builtin_model(name : str) -> dict:
+
+    modelpath = op.join(get_resource_path(), 'models')
+    info      = op.join(modelpath, 'info.json')
+
+    with open(info, 'rt') as f:
+        info = json.loads(f.read())
+
+    info         = info[name]
+    info['file'] = op.join(modelpath, info['file'])
+
+    return info
 
 
 def create_mask(dseg: str,

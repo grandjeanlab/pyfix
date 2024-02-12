@@ -1,12 +1,22 @@
 #!/usr/bin/env python
 
-import            contextlib
 import            io
 import            os
 import os.path as op
 import            shlex
 import            sys
 import            zipfile
+
+from pyfix import fix
+from pyfix.util import indir
+
+
+DATADIR              = op.join(op.dirname(__file__), 'testdata')
+DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
+FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
+TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
+TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
+CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
 
 
 class CaptureStdout:
@@ -78,15 +88,5 @@ def unzip(infile, destdir=None):
         f.extractall(destdir)
 
 
-@contextlib.contextmanager
-def indir(path):
-    cwd = os.getcwd()
-
-    if not op.exists(path):
-        os.makedirs(path, exist_ok=True)
-
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(cwd)
+def main(cmd=''):
+    return fix.main(shlex.split(cmd))

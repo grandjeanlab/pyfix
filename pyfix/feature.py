@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import io
 import itertools
 import logging
@@ -26,7 +27,7 @@ from fsl.wrappers import (fslmaths,
 from sklearn import linear_model
 from spectrum import aryule
 
-from pyfix import util, legacy
+from pyfix import util
 
 
 # TODO: add typing
@@ -36,7 +37,49 @@ from pyfix import util, legacy
 
 log = logging.getLogger(__name__)
 
-LEGACY_FEATURE_LABELS = legacy.LEGACY_FEATURE_LABELS
+
+# List of all feature (column) labels. Names correspond
+# to functions defined in this module, which are registered
+# with the feature_extractor decorator.
+#
+# Feature extractors which return multiple values will
+# have an index appended to their name, e.g.:
+#
+#     @feature_extractor
+#     def myfeature():
+#         return [1,2,3]
+#
+# will result in myfeature:0, myfeature:1, myfeature:2
+FEATURE_LABELS = [
+    'nic',
+    *[f'arvswgn:{i}' for i in np.arange(2)],
+    *[f'arfull:{i}' for i in np.arange(5)],
+    'skewness',
+    'kurtosis',
+    'mean_median',
+    *[f'entropy:{i}' for i in np.arange(2)],
+    *[f'tsjump:{i}' for i in np.arange(6)],
+    *[f'fftcoarse:{i}' for i in np.arange(4)],
+    *[f'fftfiner:{i}' for i in np.arange(7)],
+    *[f'fftfinerwrtnull:{i}' for i in np.arange(8)],
+    *[f'motioncorrelation:{i}' for i in np.arange(6)],
+    *[f'oupjk:{i}' for i in np.arange(2)],
+    *[f'clusterdist:{i}' for i in np.arange(9)],
+    *[f'negativevspositive:{i}' for i in np.arange(6)],
+    *[f'zstattofuncratio:{i}' for i in np.arange(4)],
+    *[f'slicewisestats:{i}' for i in np.arange(4)],
+    *[f'everynthvariance:{i}' for i in np.arange(4)],
+    *[f'masktscorrandoverlap:{i}' for i in np.arange(12)],
+    'smoothest:0',
+    'spatialoverlap',
+    *[f'maxtfce:{i}' for i in np.arange(3)],
+    *[f'edgemasks:{i}' for i in np.arange(15)],
+    *[f'sagmasks:{i}' for i in np.arange(72)],
+    'stripe:0',
+    *[f'dim:{i}' for i in np.arange(4)],
+    *[f'pixdim:{i}' for i in np.arange(4)],
+]
+
 
 FEATURE_EXTRACTORS = {}
 
@@ -937,7 +980,7 @@ def _create_sag_masks(data,
 
     for r in range(start, sag_masks.shape[0]):
         for c, dlabel in enumerate(('', 'dil', 'dil2')):
-            in_name  = op.join(util.get_resource_path(), 'masks', f'sag_mask{r}{dlabel}')
+            in_name  = util.get_mask(f'sag_mask{r}{dlabel}', data.species)
             out_name = data.fix_tree.get(f'std1mm2exfunc{r}{dlabel}')
 
             sag_masks[r, c] = _apply_xfm(

@@ -1,4 +1,3 @@
-import os.path as op
+#!/usr/bin/env python
 
-with open(op.join(op.dirname(__file__), 'VERSION'), 'rt') as f:
-    __version__ = f.read().strip()
+__version__ = '0.5.0'

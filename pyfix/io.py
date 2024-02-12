@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import              base64
+import              csv
 import functools as ft
 import              io
 import              json
@@ -13,26 +14,27 @@ import              tempfile
 import              warnings
 
 from dataclasses import dataclass
-from typing      import Tuple
+from typing      import List, Any
 
-import            joblib
-import nibabel as nb
-import numpy   as np
-import pandas  as pd
-import            sklearn
+import                  joblib
+import nibabel   as     nb
+import numpy     as     np
+import pandas    as     pd
+import                  sklearn
+from   file_tree import FileTree
+from   fsl.data  import fixlabels
 
-from pyfix import legacy
+import                    pyfix
+from   pyfix.util import (weak_import,
+                          get_resource)
+from   pyfix      import (legacy,
+                          feature)
 
 # InconsistentVersionWarning was added in sklearn 1.3.0
 try:
     from sklearn.exceptions import InconsistentVersionWarning
 except ImportError:
     InconsistentVersionWarning = UserWarning
-
-from file_tree import FileTree
-
-import pyfix
-from pyfix.util import weak_import, get_resource
 
 
 xgboost = weak_import('xgboost')
@@ -41,7 +43,7 @@ xgboost = weak_import('xgboost')
 log = logging.getLogger(__name__)
 
 
-def read_file_table(filename):
+def read_file_table(filename : str) -> pd.DataFrame:
     """Read a table of files for training.
 
     Args:
@@ -53,7 +55,7 @@ def read_file_table(filename):
     return pd.read_csv(filename, index_col=None)
 
 
-def save_file_table(filename, tbl):
+def save_file_table(filename : str, tbl : pd.DataFrame):
     """
     Save pyFIX features to a file
     """
@@ -74,15 +76,10 @@ def save_file_table(filename, tbl):
     tbl.to_csv(filename, index=None)
 
 
-def generate_file_table(*args,
-                        feature_name='pyfix/features.pyfix_features',
-                        label_name='hand_labels_noise.txt'):
-    """
-    Helper function to generate a table of file.
+def generate_file_table(*args):
+    """Generate a table of files from FIX folders.
 
     Args:
-        label_name:
-        feature_name:
         *args:
 
     Returns:
@@ -91,8 +88,8 @@ def generate_file_table(*args,
 
     d = pd.DataFrame(
         {
-            'features': [op.join(f, feature_name) for f in args],
-            'labels': [op.join(f, label_name) for f in args],
+            'features': [op.join(f, 'fix/features.csv') for f in args],
+            'labels': [op.join(f, 'hand_labels_noise.txt') for f in args],
             'subid': [i for i, _ in enumerate(args)]
         }
     )
@@ -108,13 +105,15 @@ class InputDirectory:
     fixdir     : str
     input_tree : FileTree
     fix_tree   : FileTree
+    species    : str
 
     @staticmethod
     def from_input_dir(
             input_dir  : str,
             input_tree : str = None,
             fix_tree   : str = None,
-            fix_dir    : str = None
+            fix_dir    : str = None,
+            species    : str = None
     ) -> InputDirectory:
 
         if input_tree is None: input_tree = get_resource('melodic.tree')
@@ -129,7 +128,8 @@ class InputDirectory:
         input_dir = op.abspath(input_dir)
         fix_dir   = op.abspath(fix_dir)
 
-        return InputDirectory(input_dir, fix_dir, input_tree, fix_tree)
+        return InputDirectory(
+            input_dir, fix_dir, input_tree, fix_tree, species)
 
 
     @property
@@ -141,15 +141,15 @@ class InputDirectory:
         if op.exists(melic):
             return nb.load(melic).shape[3]
 
-        features = self.fix_tree.get('legacy_features')
+        features = self.fix_tree.get('features')
         if op.exists(features):
-            features = legacy.read_features(features)
+            features = read_features(features)
             return features['nic'].loc[0]
 
         raise RuntimeError(f'Cannot determine nics for {self.input_dir}')
 
 
-def load_motion_parameters(fname):
+def load_motion_parameters(fname : str) -> pd.DataFrame:
     """Load motion parameters from one of:
       - MCFLIRT output files
       - eddy output files
@@ -186,12 +186,109 @@ def load_motion_parameters(fname):
     return mp
 
 
-def save_model(fname, model, threshold=None):
+@dataclass
+class Model:
+    """Class which represents a pyfix model, used by save_model and load_model.
+    This class is just a container with a reference to an xgboost/sklearn
+    classifier, and information needed to use it.
+    """
+
+    model : Any
+    """A classifier object, such as a sklearn or xgboost classifier. """
+
+    features : List[str]
+    """A list of feature labels denoting the pyfix features that were used to
+    train the classifier.
+    """
+
+    species : str
+    """Species the model was trained on. At the moment this simply determines
+    which set of mask images were used in feature extraction.
+    """
+
+    threshold : float = None
+    """An optimal probability threshold to use for classification,
+    or None if an optimal threshold was not estimated.
+    """
+
+    filename : str = None
+    """File this model was loaded from. May be None. """
+
+    def __init__(self,
+                 model     : Any,
+                 features  : List[str] = None,
+                 species   : str       = None,
+                 threshold : float     = None,
+                 filename  : str       = None):
+        """Create a Model object. """
+
+        if features is None:
+            features = feature.FEATURE_LABELS
+
+        if species in (None, ''):
+            species = 'mni152_1mm'
+
+        self.model     = model
+        self.features  = list(features)
+        self.species   = species
+        self.threshold = threshold
+        self.filename  = filename
+
+
+    @property
+    def name(self):
+        """Return a name for this Model generated from the saved file,
+        or "none" if it is not saved.
+        """
+        if self.filename is None:
+            return 'none'
+        else:
+            return op.splitext(op.basename(self.filename))[0]
+
+    @property
+    def model_type(self) -> str:
+        """Return a string identifier for the model, either 'xgboost' or
+        'sklearn'.
+        """
+
+        if (xgboost is not None) and \
+           isinstance(self.model, xgboost.XGBClassifier):
+            return 'xgboost'
+        elif isinstance(self.model, sklearn.base.ClassifierMixin):
+            return 'sklearn'
+        else:
+            raise RuntimeError(
+                f'Unsupported model {type(model)}! Pyfix only '
+                'recognises scikit-learn or xgboost classifiers')
+
+
+    def dump_model(self) -> bytes:
+        """Return a binary representation of the classifier object. """
+
+        if self.model_type == 'xgboost':
+            # xgboost.save_model doesn't have the
+            # ability to dump to memory, so we save
+            # to a temp file and read it back in
+            with tempfile.TemporaryDirectory() as tdir:
+                tmpfile = op.join(tdir, 'model.json')
+                self.model.save_model(tmpfile)
+                with open(tmpfile, 'rb') as f:
+                    dumped_model = f.read()
+
+        elif self.model_type == 'sklearn':
+            with io.BytesIO() as f:
+                joblib.dump(self.model, f)
+                dumped_model = f.getvalue()
+
+        return dumped_model
+
+
+def save_model(fname : str, model : Model, version : str = None):
     """Save a pyFIX model to file.
 
     Args:
         fname: file to which the model should be saved
-        model: model to save
+        model: Model to save
 
     Note that the pyfix model file format is subject to change without notice
     between versions. However, the developers strive to guarantee backwards-
@@ -200,6 +297,33 @@ def save_model(fname, model, threshold=None):
     Saved pyfix model files are *not* guaranteed to be forward-compatible -
     i.e. a model file saved with a particular pyfix version is not guaranteed
     to work with an older version of pyfix.
+
+    Pyfix 0.5.0
+    -----------
+
+    Pyfix models are saved in the same manner as Pyfix 0.4.0 models, but with
+    three additional fields - "format_version", "features" and "species":
+
+        {
+            "pyfix_version"   : "<pyfix-version>",
+            "format_version"  : "<file-format-version>",
+            "sklearn_version" : "<sklearn-version>",
+            "xgboost_version" : "<xgboost-version>",
+            "features"        : ["<featurelist>"],
+            "species"         : "<data-species>",
+            "model_type"      : "<model-type>",
+            "model_contents"  : "<model-contents>",
+            "model_threshold" : "<model-threshold>"  # optional
+        }
+
+    where:
+
+      - "<file-format-vesrion>" is a string containing the pyfix model
+        file format version, e.g. "0.5.0"
+      - "<featurelist>" is a JSON list containing the names of all pyfix
+        features that were used to train the model.
+      - "<data-species>" is a species identifier, e.g "mni152_1mm", "macaque",
+        etc.
 
     Pyfix 0.4.0
     -----------
@@ -253,66 +377,65 @@ def save_model(fname, model, threshold=None):
     guaranteed to work with the same scikit-learn version.
     """
 
+    if version is None:
+        version = '0.5.0'
+
+    if version not in ('0.3.0', '0.4.0', '0.5.0'):
+        raise ValueError(f'Unknown pyfix model file format version {version}')
+
+    if version != '0.5.0':
+        log.warning('Saving model with old file format '
+                    f'{version} - this is not recommended!')
+
     if not fname.endswith('.pyfix_model'):
         fname = fname + '.pyfix_model'
 
-    if (xgboost is not None) and isinstance(model, xgboost.XGBClassifier):
-        model_type = 'xgboost'
-        # xgboost.save_model doesn't have the
-        # ability to dump to memory, so we save
-        # to a temp file and read it back in
-        with tempfile.TemporaryDirectory() as tdir:
-            tmpfile = op.join(tdir, 'model.json')
-            model.save_model(tmpfile)
-            with open(tmpfile, 'rb') as f:
-                dumped_model = f.read()
-
-    elif isinstance(model, sklearn.base.ClassifierMixin):
-        model_type = 'sklearn'
-        with io.BytesIO() as f:
-            joblib.dump(model, f)
-            dumped_model = f.getvalue()
-
-    else:
-        raise RuntimeError(f'Unsupported model {type(model)}! Pyfix only '
-                           'recognises scikit-learn or xgboost classifiers')
-
-    dumped_model = base64.b64encode(dumped_model).decode()
-    to_save      = {
-        'pyfix_version'   : pyfix.__version__,
-        'sklearn_version' : sklearn.__version__,
-        'xgboost_version' : getattr(xgboost, '__version__', ''),
-        'model_type'      : model_type,
-        'model_contents'  : dumped_model,
-    }
-    if threshold is not None:
-        to_save['model_threshold'] = threshold
+    fname = op.abspath(op.expanduser(fname))
 
     if op.exists(fname):
         log.warning(f'Model file already exists - overwriting: {fname}')
 
-    fdir = op.abspath(op.expanduser(op.dirname(fname)))
+    log.info(f'Saving trained model to: {fname}')
+
+    fdir = op.dirname(fname)
     if not op.exists(fdir):
         os.makedirs(fdir)
 
-    log.info(f'Saving trained model to: {fname}')
-    with open(fname, 'wt', encoding='utf-8') as f:
-        f.write('PYFIX\n')
-        json.dump(to_save, f)
+    if version == '0.3.0':
+        joblib.dump(model.model, fname)
+
+    else:
+        dumped_model = base64.b64encode(model.dump_model()).decode()
+        to_save      = {
+            'pyfix_version'   : pyfix.__version__,
+            'sklearn_version' : sklearn.__version__,
+            'xgboost_version' : getattr(xgboost, '__version__', ''),
+            'model_type'      : model.model_type,
+            'model_contents'  : dumped_model,
+        }
+        if model.threshold is not None:
+            to_save['model_threshold'] = model.threshold
+
+        if version == '0.5.0':
+            to_save['format_version'] = version
+            to_save['features']       = model.features
+            to_save['species']        = model.species
+
+        with open(fname, 'wt', encoding='utf-8') as f:
+            f.write('PYFIX\n')
+            json.dump(to_save, f)
+
+    model.filename = fname
 
 
-def load_model(fname):
-    """
-    Load pyFIX model. See save_model for important information on the
+def load_model(fname : str) -> Model:
+    """Load pyFIX model. See save_model for important information on the
     pyfix model file format, and compatibility considerations.
 
     Args:
         fname: File to load
 
-    Returns:
-        - A model object, such as a sklearn or xgboost classifier.
-        - An optimal probability threshold to use for classification,
-          or None if an optimal threshold was not estimated.
+    Returns a Model object
     """
 
     sklearn_warning = (
@@ -341,7 +464,7 @@ def load_model(fname):
 
                 model = joblib.load(fname)
 
-        return model, None
+        return Model(model, None, None, None, fname)
 
     # pyfix >= 0.4.0 file - format as
     # described in the save_model docs.
@@ -352,9 +475,11 @@ def load_model(fname):
             f.seek(6)
             loaded = json.load(f)
 
-        mtype  = loaded['model_type']
-        mthres = loaded.get('model_threshold', None)
-        mdata  = base64.b64decode(loaded['model_contents'].encode('utf-8'))
+        mtype    = loaded['model_type']
+        mthres   = loaded.get('model_threshold', None)
+        species  = loaded.get('species', None)
+        features = loaded.get('features', feature.FEATURE_LABELS)
+        mdata    = base64.b64decode(loaded['model_contents'].encode('utf-8'))
 
         if mtype == 'xgboost':
 
@@ -382,14 +507,119 @@ def load_model(fname):
                                f'version of Pyfix ({pyfix.__version__}) '
                                'only recognises scikit-learn or xgboost '
                                'classifiers')
-        return model, mthres
+
+        return Model(model, features, species, mthres, fname)
 
     # Sniff the first few bytes of
     # the file to see what we have
     with open(fname, 'rb') as f:
-         header = f.read(6)
+        header = f.read(6)
 
     if header == b'PYFIX\n':
         return load_new_pyfix_model_file()
     else:
         return load_old_pyfix_model_file()
+
+
+def generate_label_filename(meldir, modelfile, threshold):
+    """Create a FIX/melview-style file name for storing IC labels. """
+    model     = op.splitext(op.basename(modelfile))[0]
+    threshold = int(threshold)
+    return op.join(meldir, f'fix4melview_{model}_thr{threshold}.txt')
+
+
+def read_labels(filename: str, nics : int = None) -> np.ndarray:
+    """Read legacy label files, melview and hand_labels_noise.txt.
+
+    If nics is None, a sequence of one-indexed noise IC labels is returned.
+    Otherwise, a sequence with a value for each IC is returned, containing
+    1 for noise ICs, and 0 for signal ICs.
+    """
+
+    indices = fixlabels.loadLabelFile(filename, returnIndices=True)[2]
+    indices = np.array(indices, dtype=int)
+
+    if nics is None:
+        return indices
+    else:
+        labels = np.zeros(nics)
+        labels[indices - 1] = 1
+
+    return labels
+
+
+def read_features(path: str, columns : List[str] = None):
+    """Read legacy FIX features from file.
+
+    Args:
+        path (str):     Path to feature file
+        columns (list): List of column names - defaults to
+                        pyfix.feature.FEATURE_LABELS
+
+    Returns:
+        features table (pd.DataFrame):
+    """
+
+    log.debug(f'Loading feature file {path}')
+
+    with open(path, 'rt') as f:
+        data = f.read()
+
+    # do we have column names?
+    header = csv.Sniffer().has_header(data)
+    ncols  = len(data.split('\n')[0].split(','))
+
+    # If columns have been provided, we assume
+    # that the user knows what they're doing.
+    if columns is not None:
+        header = 0 if header else None
+
+        log.debug(f'Expecting a custom set of {len(columns)} columns')
+
+    else:
+        # Otherwise, if the file has no header,
+        # we assume it has FEATURE_LABELS columns
+        if not header:
+            columns = feature.FEATURE_LABELS
+            header  = None
+            log.debug(f'Expecting all {len(columns)} pyfix '
+                      f'{pyfix.__version__} columns')
+
+        # otherwise the file contains column labels
+        else:
+            header = 0
+            log.debug(f'Expecting a subset of pyfix '
+                      f'{pyfix.__version__} columns')
+
+    df = pd.read_csv(io.StringIO(data), header=header, names=columns)
+
+    if columns is None:
+        columns = df.columns
+
+    if len(columns) != ncols:
+        msg = (f'Feature file {path} contains an unexpected '
+               f'number of columns! Expected {len(columns)} '
+               f'columns, but the file contains {ncols} columns')
+        log.error(msg)
+        raise RuntimeError(msg)
+
+    # Convert legacy FIX labels into pyfix labels
+    df = df.rename(columns=legacy.LEGACY_FEATURE_LABELS)
+
+    for column in df.columns:
+        if column not in feature.FEATURE_LABELS:
+            log.warning(f'Unrecognised feature column in {path}: {column}')
+
+    for column in feature.FEATURE_LABELS:
+        if column not in df.columns:
+            log.warning(f'Missing feature column in {path}: {column}')
+
+    return df
+
+
+def save_features(path     : str,
+                  features : pd.DataFrame,
+                  header   : bool = True):
+    """Save FIX features to file."""
+    labels = [f for f in feature.FEATURE_LABELS if f in features.columns]
+    features[labels].to_csv(path, index=None, header=header)

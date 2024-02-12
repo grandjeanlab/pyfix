@@ -1,3 +1,18 @@
+This file contains the pyFIX release history in reverse chronological order.
+
+# 0.5.0 (Tuesday 13th February 2024)
+
+ - Adjust pyFIX so that it can be used on existing data sets (where features
+   have already beeen extracted) which do not contain all features.
+ - Add new `--species` option, used during feature extraction and model
+   training, which (at present) controls which brain mask images are used
+   on input data sets.
+ - Add new brain masks for use with NHP-HCP Macaque data sets.
+ - Add new `NHP_HCP_Macaque` and `HCP_Style_Single_Multirun_Dedrift` built-in
+   models - these are equivalents of the analagous models that were released
+   with old FIX.
+
+
 # 0.4.0 (Monday 22nd January 2024)
 
  - Now using the [xgboost](https://xgboost.readthedocs.io/) classifier by

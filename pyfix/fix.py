@@ -6,6 +6,7 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 
 import argparse
 import calendar
+import contextlib
 import datetime
 import functools as ft
 import logging
@@ -25,6 +26,7 @@ from fsl.data import melodicanalysis, featanalysis
 from fsl.wrappers import wrapperconfig
 
 from pyfix      import (extract,
+                        feature,
                         legacy,
                         io,
                         classify,
@@ -33,15 +35,14 @@ from pyfix      import (extract,
                         __version__)
 from pyfix.util import (weak_import,
                         get_resource,
-                        get_model_file,
+                        get_builtin_model,
                         list_models)
 
 
 log = logging.getLogger(__name__)
 
 
-USAGE = f'''
-FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
+USAGE = f"""FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
 
 Simple usage, assuming training data already exists:
 
@@ -108,7 +109,7 @@ Usage for each stage separately, including creation of training data:
                    default less-aggressive (unique variance) cleanup.
 
 The following built-in models can be used for classification:
-''' + '\n'.join(f' - {m}' for m in list_models())
+""" + '\n'.join(f' - {m}' for m in list_models())
 
 def assert_is_melodic_dir(meldir):
 
@@ -140,6 +141,7 @@ def assert_has_hand_labels(meldir):
 
 
 def run_feature_extraction(meldir     : str,
+                           species    : str = None,
                            input_tree : str = None,
                            fix_tree   : str = None,
                            outdir     : str = None,
@@ -149,26 +151,27 @@ def run_feature_extraction(meldir     : str,
 
     # instantiate FixData object
     indir = io.InputDirectory.from_input_dir(
-        meldir, input_tree, fix_tree, outdir)
+        meldir, input_tree, fix_tree, outdir, species)
     d     = extract.FixData.from_input_dir(indir)
 
     # extract legacy features
     f = extract.extract_features(
         data=d,
-        features=legacy.LEGACY_FEATURE_EXTRACTORS)
+        features=sorted(feature.FEATURE_EXTRACTORS.keys()))
 
-    # save features (pyfix and legacy-fix formats)
-    f.to_csv(d.fix_tree.get('pyfix_features'), index=None)
-    legacy.save_features(d.fix_tree.get('legacy_features'), f)
+    # save features
+    io.save_features(d.fix_tree.get('features'), f)
 
 
-def run_train(meldir      : List[str],
-              basename    : str,
-              model_class : str  = None,
-              loo         : bool = False,
-              tune        : bool = False,
-              n_jobs      : int  = None,
-              n_trials    : int  = None,
+def run_train(meldir          : List[str],
+              basename        : str,
+              model_class     : str  = None,
+              feature_columns : str  = None,
+              species         : str  = None,
+              loo             : bool = False,
+              tune            : bool = False,
+              n_jobs          : int  = None,
+              n_trials        : int  = None,
               **kwargs):
 
     if tune:
@@ -182,13 +185,14 @@ def run_train(meldir      : List[str],
         assert_has_features(d)
         assert_has_hand_labels(d)
 
-    file_table = legacy.generate_file_table(*meldir)
+    file_table = io.generate_file_table(*meldir)
 
     #  save file table
     io.save_file_table(basename, file_table)
 
     # read and collate all features into a training table
-    training_data = classify.collate_features(file_table, legacy_features=True)
+    training_data, feature_columns = classify.collate_features(
+        file_table, feature_columns)
 
     # Training with optional LOO cross validation
     if not tune:
@@ -213,7 +217,9 @@ def run_train(meldir      : List[str],
             f.write(report_text)
 
     # save model
-    io.save_model(basename, clf, threshold)
+    model = io.Model(clf, feature_columns, species, threshold)
+    io.save_model(basename, model)
+    return model
 
 
 def run_classify(meldir     : str,
@@ -235,16 +241,18 @@ def run_classify(meldir     : str,
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    features0 = legacy.read_features(fixtree.get('legacy_features'))
+    model     = io.load_model(model)
+    features0 = io.read_features(fixtree.get('features'), model.features)
+    features0 = features0[model.features]
 
-    clf, saved_threshold = io.load_model(model)
-    ypb                  = classify.classify(features0, clf)[1]
+    ypb       = classify.classify(features0, model.model)[1]
 
     if threshold is None:
-        threshold = saved_threshold
+        threshold = model.threshold
+
     if threshold is None:
         raise RuntimeError('You must specify a probability threshold - '
-                           f'{model} does not contain an optimal '
+                           f'{model.filename} does not contain an optimal '
                            'threshold.')
 
     y = legacy.prob_threshold(ypb, threshold=threshold / 100)
@@ -254,9 +262,8 @@ def run_classify(meldir     : str,
     # (as per legacy fix4melview files)
     y          = ~y
     labels     = [['Noise'] if i else ['Signal'] for i in y]
-    modelname  = op.splitext(op.basename(model))[0]
     label_file = intree \
-                   .update(threshold=threshold, model=modelname) \
+                   .update(threshold=threshold, model=model.name) \
                    .get('fix_labels')
     fixlabels.saveLabelFile(labels, label_file, meldir)
 
@@ -315,7 +322,7 @@ def run_apply(labels     : str,
     motion_parameters_filt  = ftree.get('motion_params_filtered')
     motion_parameters_clean = ftree.get('motion_params_cleaned')
 
-    ddremove = legacy.read_labels(labels)
+    ddremove = io.read_labels(labels)
 
     tr = clean.get_tr(nifti_filt)
 
@@ -372,7 +379,7 @@ def run_main(**kwargs):
     run_apply(**kwargs)
 
 
-def setup_logging(logfile):
+def setup_logging(logfile, argv):
 
     # Make warnings emitted via the warnings
     # module get directed to the log
@@ -409,8 +416,48 @@ def setup_logging(logfile):
     # xgboost emits UserWarning regarding unused parameters
     warnings.filterwarnings('ignore', module='xgboost')
 
+    date = datetime.date.today()
+    if argv is None:
+        argv = list(sys.argv)
+
+    log.info('pyfix %s', __version__)
+    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
+    log.info('pwd: %s', os.getcwd())
+    log.info('command-line arguments: %s', ' '.join(argv))
+
+
+@contextlib.contextmanager
+def logwrappers():
+    """Context manager which configures fsl.wrapper functions so that
+    called commands and all standard output/error are logged to the
+    pyfix log.
+    """
+
+    def logoutput(what, output):
+        output = output.strip()
+        if output != '':
+            log.debug('%s: %s', what, output, stacklevel=2)
+
+    with wrapperconfig(log={
+            'tee'    : False,
+            'cmd'    : ft.partial(logoutput, 'Calling command'),
+            'stdout' : ft.partial(logoutput, 'Standard output'),
+            'stderr' : ft.partial(logoutput, 'Standard error')}):
+        yield
+
 
 def main(argv=None):
+
+    def load_feature_columns(filename):
+        # --feature_columns is expected to be a plain
+        # text file with a column label on each line
+        with open(filename, 'rt') as f:
+            cols = f.readlines()
+
+        cols = [c.strip() for c in cols]
+        cols = [c for c in cols if c != '']
+
+        return cols
 
     # options passed to all ArgumentParser objects
     opts = {'add_help'     : False,
@@ -444,6 +491,7 @@ def main(argv=None):
     feature_parser = argparse.ArgumentParser(**opts)
     feature_parser.add_argument('meldir', metavar='<mel.ica>')
     feature_parser.add_argument('-o', '--outdir')
+    feature_parser.add_argument('-s', '--species')
 
     # TRAIN parser
     train_parser = argparse.ArgumentParser(**opts)
@@ -454,6 +502,10 @@ def main(argv=None):
     train_parser.add_argument('-m', '--model_class')
     train_parser.add_argument('-n', '--n_trials', type=int,
                               default=100)
+    train_parser.add_argument('-s', '--species')
+    train_parser.add_argument('-f', '--feature_columns',
+                              type=load_feature_columns)
+    train_parser.add_argument('-', '--tr', type=float)
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
@@ -473,6 +525,8 @@ def main(argv=None):
     eval_parser.add_argument('-t', '--thresholds', metavar='1,2,5,...',
                              default='1,2,5,10,20,30,40,50',
                              type=parse_thresholds)
+    eval_parser.add_argument('-f', '--feature_columns',
+                             type=load_feature_columns)
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(**opts)
@@ -510,33 +564,16 @@ def main(argv=None):
 
     parser, runfunc = switches[switch]
     args            = parser.parse_args(argv)
-    date            = datetime.date.today()
 
-    # allow built-in models
-    # to be selected by name
-    if hasattr(args, 'model') and not op.exists(args.model):
-        args.model = get_model_file(args.model)
+    # allow built-in models to be selected by
+    # name, and auto-load associated settings
+    if hasattr(args, 'model') and (not op.exists(args.model)):
+        model      = get_builtin_model(args.model)
+        args.model = model['file']
 
-    setup_logging(args.logfile)
+    setup_logging(args.logfile, argv)
 
-    log.info('pyfix %s', __version__)
-    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
-    log.info('pwd: %s', os.getcwd())
-    log.info('command-line arguments: %s', ' '.join(argv))
-
-    # Configure fsl.wrappers so that called
-    # commands and all standard output/error
-    # are logged to the pyfix log.
-    def logoutput(what, output):
-        output = output.strip()
-        if output != '':
-            log.debug('%s: %s', what, output)
-
-    with wrapperconfig(log={
-            'tee'    : False,
-            'cmd'    : ft.partial(logoutput, 'Calling command'),
-            'stdout' : ft.partial(logoutput, 'Standard output'),
-            'stderr' : ft.partial(logoutput, 'Standard error')}):
+    with logwrappers():
         runfunc(**vars(args))
 
 

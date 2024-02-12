@@ -1,0 +1,26 @@
+{
+    "Standard" : {
+        "file" : "Standard.pyfix_model"
+    },
+    "UKBiobank" : {
+        "file" : "UKBiobank.pyfix_model"
+    },
+    "WhII_Standard" : {
+        "file" : "WhII_Standard.pyfix_model"
+    },
+    "WhII_MB6" : {
+        "file" : "WhII_MB6.pyfix_model"
+    },
+    "HCP25_hp2000" : {
+        "file" : "HCP25_hp2000.pyfix_model"
+    },
+    "HCP7T_hp2000" : {
+        "file" : "HCP7T_hp2000.pyfix_model"
+    },
+    "NHP_HCP_Macaque" : {
+        "file" : "NCPHCP_Macaque_RIKEN30SRFIX.pyfix_model"
+    },
+    "HCP_Style_Single_Multirun_Dedrift" : {
+        "file" : "HCP_Style_Single_Multirun_Dedrift.pyfix_model"
+    }
+}

@@ -46,8 +46,11 @@ exclude = ["examples"]
 pyfix = ["VERSION", "resources/*", "resources/masks/*", "resources/models/*", "examples/*"]
 
 [tool.setuptools.dynamic]
-version = {file = "pyfix/VERSION"}
+version = {attr = "pyfix.__version__"}
 
+[tool.coverage.run]
+include = ["pyfix/*"]
+omit    = ["pyfix/tests/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["pyfix/tests"]
