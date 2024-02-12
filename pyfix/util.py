@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import contextlib
 import glob
 import json
 import logging
@@ -25,6 +26,23 @@ def assert_file_exists(*args):
     for f in args:
         if not op.exists(f):
             raise FileNotFoundError(f)
+
+
+@contextlib.contextmanager
+def indir(path):
+    """Context manager which changes into the given directory, yields,
+    then changes back.
+    """
+    cwd = os.getcwd()
+
+    if not op.exists(path):
+        os.makedirs(path, exist_ok=True)
+
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(cwd)
 
 
 def get_resource_path() -> str:

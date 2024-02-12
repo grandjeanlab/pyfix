@@ -6,6 +6,7 @@ FIX (FMRIB's ICA-based Xnoiseifier).
 
 import argparse
 import calendar
+import contextlib
 import datetime
 import functools as ft
 import logging
@@ -41,8 +42,7 @@ from pyfix.util import (weak_import,
 log = logging.getLogger(__name__)
 
 
-USAGE = f'''
-FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
+USAGE = f"""FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
 
 Simple usage, assuming training data already exists:
 
@@ -109,7 +109,7 @@ Usage for each stage separately, including creation of training data:
                    default less-aggressive (unique variance) cleanup.
 
 The following built-in models can be used for classification:
-''' + '\n'.join(f' - {m}' for m in list_models())
+""" + '\n'.join(f' - {m}' for m in list_models())
 
 def assert_is_melodic_dir(meldir):
 
@@ -379,7 +379,7 @@ def run_main(**kwargs):
     run_apply(**kwargs)
 
 
-def setup_logging(logfile):
+def setup_logging(logfile, argv):
 
     # Make warnings emitted via the warnings
     # module get directed to the log
@@ -415,6 +415,35 @@ def setup_logging(logfile):
 
     # xgboost emits UserWarning regarding unused parameters
     warnings.filterwarnings('ignore', module='xgboost')
+
+    date = datetime.date.today()
+    if argv is None:
+        argv = list(sys.argv)
+
+    log.info('pyfix %s', __version__)
+    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
+    log.info('pwd: %s', os.getcwd())
+    log.info('command-line arguments: %s', ' '.join(argv))
+
+
+@contextlib.contextmanager
+def logwrappers():
+    """Context manager which configures fsl.wrapper functions so that
+    called commands and all standard output/error are logged to the
+    pyfix log.
+    """
+
+    def logoutput(what, output):
+        output = output.strip()
+        if output != '':
+            log.debug('%s: %s', what, output, stacklevel=2)
+
+    with wrapperconfig(log={
+            'tee'    : False,
+            'cmd'    : ft.partial(logoutput, 'Calling command'),
+            'stdout' : ft.partial(logoutput, 'Standard output'),
+            'stderr' : ft.partial(logoutput, 'Standard error')}):
+        yield
 
 
 def main(argv=None):
@@ -535,7 +564,6 @@ def main(argv=None):
 
     parser, runfunc = switches[switch]
     args            = parser.parse_args(argv)
-    date            = datetime.date.today()
 
     # allow built-in models to be selected by
     # name, and auto-load associated settings
@@ -543,26 +571,9 @@ def main(argv=None):
         model      = get_builtin_model(args.model)
         args.model = model['file']
 
-    setup_logging(args.logfile)
+    setup_logging(args.logfile, argv)
 
-    log.info('pyfix %s', __version__)
-    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
-    log.info('pwd: %s', os.getcwd())
-    log.info('command-line arguments: %s', ' '.join(argv))
-
-    # Configure fsl.wrappers so that called
-    # commands and all standard output/error
-    # are logged to the pyfix log.
-    def logoutput(what, output):
-        output = output.strip()
-        if output != '':
-            log.debug('%s: %s', what, output)
-
-    with wrapperconfig(log={
-            'tee'    : False,
-            'cmd'    : ft.partial(logoutput, 'Calling command'),
-            'stdout' : ft.partial(logoutput, 'Standard output'),
-            'stderr' : ft.partial(logoutput, 'Standard error')}):
+    with logwrappers():
         runfunc(**vars(args))
 
 
