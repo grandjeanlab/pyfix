@@ -6,4 +6,6 @@ pip install -e ".[extra]"
 export FSLDIR=${CONDA_PREFIX}
 source $FSLDIR/etc/fslconf/fsl.sh
 
+pip freeze
+
 pytest
