@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import            contextlib
 import            io
 import            os
 import os.path as op
@@ -9,6 +8,7 @@ import            sys
 import            zipfile
 
 from pyfix import fix
+from pyfix.util import indir
 
 
 DATADIR              = op.join(op.dirname(__file__), 'testdata')
@@ -86,20 +86,6 @@ def link_directory(src, dest, exclude=None):
 def unzip(infile, destdir=None):
     with zipfile.ZipFile(infile) as f:
         f.extractall(destdir)
-
-
-@contextlib.contextmanager
-def indir(path):
-    cwd = os.getcwd()
-
-    if not op.exists(path):
-        os.makedirs(path, exist_ok=True)
-
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(cwd)
 
 
 def main(cmd=''):
