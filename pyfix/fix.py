@@ -420,10 +420,10 @@ def setup_logging(logfile, argv):
     if argv is None:
         argv = list(sys.argv)
 
-    log.info('pyfix %s', __version__)
-    log.info('date: %s (%s)', date, calendar.day_name[date.weekday()])
-    log.info('pwd: %s', os.getcwd())
-    log.info('command-line arguments: %s', ' '.join(argv))
+    log.info('pyfix    %s', __version__)
+    log.info('date:    %s (%s)', date, calendar.day_name[date.weekday()])
+    log.info('pwd:     %s', os.getcwd())
+    log.info('command: %s', ' '.join(argv))
 
 
 @contextlib.contextmanager
@@ -505,7 +505,6 @@ def main(argv=None):
     train_parser.add_argument('-s', '--species')
     train_parser.add_argument('-f', '--feature_columns',
                               type=load_feature_columns)
-    train_parser.add_argument('-', '--tr', type=float)
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
