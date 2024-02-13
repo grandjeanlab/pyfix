@@ -165,13 +165,13 @@ def run_feature_extraction(meldir     : str,
 
 def run_train(meldir          : List[str],
               basename        : str,
-              model_class     : str  = None,
-              feature_columns : str  = None,
-              species         : str  = None,
-              loo             : bool = False,
-              tune            : bool = False,
-              n_jobs          : int  = None,
-              n_trials        : int  = None,
+              model_class     : str       = None,
+              feature_columns : List[str] = None,
+              species         : str       = None,
+              loo             : bool      = False,
+              tune            : bool      = False,
+              n_jobs          : int       = None,
+              n_trials        : int       = None,
               **kwargs):
 
     if tune:
@@ -448,17 +448,6 @@ def logwrappers():
 
 def main(argv=None):
 
-    def load_feature_columns(filename):
-        # --feature_columns is expected to be a plain
-        # text file with a column label on each line
-        with open(filename, 'rt') as f:
-            cols = f.readlines()
-
-        cols = [c.strip() for c in cols]
-        cols = [c for c in cols if c != '']
-
-        return cols
-
     # options passed to all ArgumentParser objects
     opts = {'add_help'     : False,
             'allow_abbrev' : False}
@@ -504,7 +493,7 @@ def main(argv=None):
                               default=100)
     train_parser.add_argument('-s', '--species')
     train_parser.add_argument('-f', '--feature_columns',
-                              type=load_feature_columns)
+                              type=io.read_feature_columns)
     train_parser.add_argument('meldir', metavar='<mel.ica>', nargs='+')
 
     # CLASSIFY parser
@@ -525,7 +514,7 @@ def main(argv=None):
                              default='1,2,5,10,20,30,40,50',
                              type=parse_thresholds)
     eval_parser.add_argument('-f', '--feature_columns',
-                             type=load_feature_columns)
+                             type=io.read_feature_columns)
 
     # APPLY parser
     apply_parser = argparse.ArgumentParser(**opts)

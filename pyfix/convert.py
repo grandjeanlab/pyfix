@@ -22,9 +22,10 @@ import textwrap   as tw
 
 import pandas     as pd
 
-from fsl.utils.tempdir import tempdir
-from pyfix.util        import indir
-from pyfix             import fix
+from fsl.utils.tempdir import  tempdir
+from pyfix.util        import  indir
+from pyfix             import (fix,
+                               io)
 
 
 log = logging.getLogger(__name__)
@@ -59,12 +60,12 @@ def extract_features(model_file, workdir):
 
     # R script which loads a FIX .RData model, and
     # outputs features+hand labels to a CSV file
-    features   = op.join(workdir, 'features.csv')
+    features   = op.join(workdir, 'all_features.csv')
     scriptfile = op.join(workdir, 'script.r')
     script     = tw.dedent(f"""
     load("{model_file}")
     write.csv(hcp.data, "{features}")
-    """)
+    """).strip()
 
     with open(scriptfile, 'wt') as f:
         f.write(script)
@@ -121,10 +122,10 @@ def split_features(features, workdir):
     # hand labels for every subject.
     for i, (start, nics) in enumerate(subj_slices):
 
-        icadir       = op.join(workdir, '{i + 1}.ica')
-        fixdir       = op.join(icadir, 'fix')
-        feature_file = op.join(fixdir, 'features.csv')
-        label_file   = op.join(icadir, 'hand_labels_noise.txt')
+        icadir       = op.join(workdir, f'{i + 1}.ica')
+        fixdir       = op.join(icadir,   'fix')
+        feature_file = op.join(fixdir,   'features.csv')
+        label_file   = op.join(icadir,   'hand_labels_noise.txt')
 
         icadirs.append(icadir)
 
@@ -170,7 +171,7 @@ def parse_args(argv=None):
     # turn out_model into a basename, as
     # pyfix will auto-add the pyfix_model suffix
     if args.out_model.endswith('.pyfix_model'):
-        args.out_model = args.in_model[:-12])
+        args.out_model = args.out_model[:-12]
 
     if args.datadir is not None:
         args.datadir = op.abspath(op.expanduser(args.out_model))
@@ -184,6 +185,7 @@ def main(argv=None):
     """
 
     args = parse_args(argv)
+    fix.setup_logging(args.logfile, argv)
 
     try:
         r('--version')
@@ -192,8 +194,6 @@ def main(argv=None):
               'to convert an old FIX .RData model into a pyFIX model.')
         sys.exit(1)
 
-    fix.setup_logging(args.logfile, argv)
-
     if args.datadir is not None:
         os.makedirs(args.datadir, exist_ok=True)
 
@@ -201,13 +201,15 @@ def main(argv=None):
 
         features         = extract_features(args.in_model, workdir)
         icadirs, columns = split_features(features, workdir)
+        columns          = io.read_feature_columns(columns)
+        modelname        = op.basename(args.out_model)
 
         fix.run_train(meldir=icadirs,
-                      basename=args.out_model,
+                      basename=modelname,
                       species=args.species,
                       feature_columns=columns,
-                      tr=args.tr,
                       loo=args.loo)
+        shutil.move(f'{modelname}.pyfix_model', op.dirname(args.out_model))
 
 
 if __name__ == '__main__':

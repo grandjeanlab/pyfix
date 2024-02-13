@@ -623,3 +623,18 @@ def save_features(path     : str,
     """Save FIX features to file."""
     labels = [f for f in feature.FEATURE_LABELS if f in features.columns]
     features[labels].to_csv(path, index=None, header=header)
+
+
+def read_feature_columns(filename : str) -> List[str]:
+    """Loads feature column names from a file passed via the --feature_columns
+    option. Each column name is expected to be on a new line.
+    """
+    # --feature_columns is expected to be a plain
+    # text file with a column label on each line
+    with open(filename, 'rt') as f:
+        cols = f.readlines()
+
+    cols = [c.strip() for c in cols]
+    cols = [c for c in cols if c != '']
+
+    return cols
