@@ -25,6 +25,7 @@ conda create -y ${channels[@]}   \
       pytest                     \
       pytest-cov                 \
       python=3.11                \
+      r-base                     \
       scikit-learn               \
       scipy                      \
       spectrum
