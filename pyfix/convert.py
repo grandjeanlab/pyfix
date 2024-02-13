@@ -174,7 +174,7 @@ def parse_args(argv=None):
         args.out_model = args.out_model[:-12]
 
     if args.datadir is not None:
-        args.datadir = op.abspath(op.expanduser(args.out_model))
+        args.datadir = op.abspath(op.expanduser(args.datadir))
 
     return args
 
@@ -209,7 +209,7 @@ def main(argv=None):
                       species=args.species,
                       feature_columns=columns,
                       loo=args.loo)
-        shutil.move(f'{modelname}.pyfix_model', op.dirname(args.out_model))
+        shutil.copy(f'{modelname}.pyfix_model', op.dirname(args.out_model))
 
 
 if __name__ == '__main__':
