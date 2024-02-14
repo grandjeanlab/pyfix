@@ -25,7 +25,8 @@ import pandas     as pd
 from fsl.utils.tempdir import  tempdir
 from pyfix.util        import  indir
 from pyfix             import (fix,
-                               io)
+                               io,
+                               legacy)
 
 
 log = logging.getLogger('pyfix.convert')
@@ -92,9 +93,10 @@ def split_features(features, workdir):
     icadirs     = []
     column_file = op.join(workdir, 'columns.txt')
 
-    # Generate a file containing column labels
-    # to pass to pyfix for training
+    # Generate a file containing pyFIX column
+    # labels to pass to pyfix for training
     columns = list(features.drop(columns=['class.labs']).columns)
+    columns = [legacy.LEGACY_FEATURE_LABELS[c] for c in columns]
     with open(column_file, 'wt') as f:
         for c in columns:
             f.write(f'{c}\n')
@@ -135,7 +137,7 @@ def split_features(features, workdir):
         labels        = list(subj_features['class.labs'])
         subj_features = subj_features.drop(columns=['class.labs'])
 
-        subj_features.to_csv(feature_file, header=False, index=False)
+        subj_features.to_csv(feature_file, index=False)
 
         # generate list of noise IC indices
         labels = [i for (i, l) in enumerate(labels, start=1) if l == 0]
