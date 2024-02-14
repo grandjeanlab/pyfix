@@ -241,11 +241,9 @@ def run_classify(meldir     : str,
     if not op.exists(fixdir):
         raise RuntimeError(f'Cannot find fix directory in: {meldir}')
 
-    model     = io.load_model(model)
-    features0 = io.read_features(fixtree.get('features'), model.features)
-    features0 = features0[model.features]
-
-    ypb       = classify.classify(features0, model.model)[1]
+    model    = io.load_model(model)
+    features = io.read_features(fixtree.get('features'), model.features)
+    ypb      = classify.classify(features, model.model)[1]
 
     if threshold is None:
         threshold = model.threshold
