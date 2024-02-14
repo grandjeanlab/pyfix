@@ -28,7 +28,7 @@ from pyfix             import (fix,
                                io)
 
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('pyfix.convert')
 
 
 def r(cmd):
@@ -45,8 +45,8 @@ def r(cmd):
     result = sp.run(shlex.split(cmd), check=False, capture_output=True)
 
     log.debug('Result: %u',          result.returncode)
-    log.debug('Standard output: %s', result.stdout)
-    log.debug('Standard error: %s',  result.stderr)
+    log.debug('Standard output: %s', result.stdout.decode().strip())
+    log.debug('Standard error: %s',  result.stderr.decode().strip())
 
     if result.returncode != 0:
         raise RuntimeError(f'Command returned non-zero exit status: {cmd}')

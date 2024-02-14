@@ -39,7 +39,7 @@ from pyfix.util import (weak_import,
                         list_models)
 
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('pyfix.fix')
 
 
 USAGE = f"""FIX (FMRIB's ICA-based Xnoiseifier) [version {__version__}]
@@ -420,10 +420,10 @@ def setup_logging(logfile, argv):
     if argv is None:
         argv = list(sys.argv)
 
-    log.info('pyfix    %s', __version__)
-    log.info('date:    %s (%s)', date, calendar.day_name[date.weekday()])
-    log.info('pwd:     %s', os.getcwd())
-    log.info('command: %s', ' '.join(argv))
+    logger.info('pyfix    %s', __version__)
+    logger.info('date:    %s (%s)', date, calendar.day_name[date.weekday()])
+    logger.info('pwd:     %s', os.getcwd())
+    logger.info('command: %s', ' '.join(argv))
 
 
 @contextlib.contextmanager
