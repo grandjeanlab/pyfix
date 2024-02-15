@@ -590,7 +590,7 @@ def read_features(path    : str,
     if not has_header:
         log.debug(f'Feature file {path} does not contain column labels - '
                   'assuming it contains standard ordered features')
-        df.columns[:len(columns)] = columns
+        df = df.rename(columns={i : c for i, c in enumerate(columns)})
 
     # File has column labels - transform old FIX
     # feature labels into new pyfix labels
