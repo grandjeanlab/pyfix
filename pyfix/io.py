@@ -143,7 +143,7 @@ class InputDirectory:
 
         features = self.fix_tree.get('features')
         if op.exists(features):
-            features = read_features(features)
+            features = read_features(features, ['nic'])
             return features['nic'].loc[0]
 
         raise RuntimeError(f'Cannot determine nics for {self.input_dir}')
@@ -548,71 +548,72 @@ def read_labels(filename: str, nics : int = None) -> np.ndarray:
     return labels
 
 
-def read_features(path: str, columns : List[str] = None):
+def read_features(path    : str,
+                  columns : List[str] = None):
     """Read legacy FIX features from file.
 
     Args:
         path (str):     Path to feature file
-        columns (list): List of column names - defaults to
-                        pyfix.feature.FEATURE_LABELS
 
+        columns (list): List of column/feature names expected to be present in
+                        the file - defaults to pyfix.feature.FEATURE_LABELS.
     Returns:
         features table (pd.DataFrame):
     """
 
-    log.debug(f'Loading feature file {path}')
+    if columns is None:
+        columns = list(feature.FEATURE_LABELS)
 
+    # relabel to pyfix labels
+    # if given old fix labels
+    for i, col in enumerate(columns):
+        columns[i] = legacy.LEGACY_FEATURE_LABELS.get(col, col)
+
+    # unrecognised features requested
+    if any(c not in feature.FEATURE_LABELS for c in columns):
+        raise ValueError('Unrecognised features requested: {columns}')
+
+    log.debug(f'Loading {len(columns)} from feature file {path}')
+
+    # Load feature file, and check
+    # whether we have column labels
     with open(path, 'rt') as f:
         data = f.read()
 
-    # do we have column names?
-    header = csv.Sniffer().has_header(data)
-    ncols  = len(data.split('\n')[0].split(','))
+    has_header = csv.Sniffer().has_header(data)
+    header     = 0 if has_header else None
+    df         = pd.read_csv(io.StringIO(data), header=header)
 
-    # If columns have been provided, we assume
-    # that the user knows what they're doing.
-    if columns is not None:
-        header = 0 if header else None
+    # File does not contain column labels - assume
+    # first N columns correspond to the ones we are
+    # expecting
+    if not has_header:
+        log.debug(f'Feature file {path} does not contain column labels - '
+                  'assuming it contains standard ordered features')
+        df = df.rename(columns={i : c for i, c in enumerate(columns)})
 
-        log.debug(f'Expecting a custom set of {len(columns)} columns')
-
+    # File has column labels - transform old FIX
+    # feature labels into new pyfix labels
     else:
-        # Otherwise, if the file has no header,
-        # we assume it has FEATURE_LABELS columns
-        if not header:
-            columns = feature.FEATURE_LABELS
-            header  = None
-            log.debug(f'Expecting all {len(columns)} pyfix '
-                      f'{pyfix.__version__} columns')
+        df = df.rename(columns=legacy.LEGACY_FEATURE_LABELS)
 
-        # otherwise the file contains column labels
-        else:
-            header = 0
-            log.debug(f'Expecting a subset of pyfix '
-                      f'{pyfix.__version__} columns')
+    # file has too few columns - error
+    if len(df.columns) < len(columns):
+        raise RuntimeError(f'Feature file {path} does not have expected '
+                           f'number of columns (has: {len(df.columns)}, '
+                           f'expected {len(columns)}).')
 
-    df = pd.read_csv(io.StringIO(data), header=header, names=columns)
+    # error if file doesn't contain the columns we expect
+    missing = [c for c in columns    if c not in df.columns]
+    extra   = [c for c in df.columns if c not in columns]
 
-    if columns is None:
-        columns = df.columns
+    if len(missing) > 0:
+        raise RuntimeError(f'Feature file {path} is missing '
+                           f'expected features: {missing}')
 
-    if len(columns) != ncols:
-        msg = (f'Feature file {path} contains an unexpected '
-               f'number of columns! Expected {len(columns)} '
-               f'columns, but the file contains {ncols} columns')
-        log.error(msg)
-        raise RuntimeError(msg)
-
-    # Convert legacy FIX labels into pyfix labels
-    df = df.rename(columns=legacy.LEGACY_FEATURE_LABELS)
-
-    for column in df.columns:
-        if column not in feature.FEATURE_LABELS:
-            log.warning(f'Unrecognised feature column in {path}: {column}')
-
-    for column in feature.FEATURE_LABELS:
-        if column not in df.columns:
-            log.warning(f'Missing feature column in {path}: {column}')
+    if len(extra) > 0:
+        log.debug(f'Feature file {path} - dropping unneeded features: {extra}')
+        df = df.drop(columns=extra)
 
     return df
 
@@ -621,5 +622,21 @@ def save_features(path     : str,
                   features : pd.DataFrame,
                   header   : bool = True):
     """Save FIX features to file."""
+    # filter and re-order to known features
     labels = [f for f in feature.FEATURE_LABELS if f in features.columns]
     features[labels].to_csv(path, index=None, header=header)
+
+
+def read_feature_columns(filename : str) -> List[str]:
+    """Loads feature column names from a file passed via the --feature_columns
+    option. Each column name is expected to be on a new line.
+    """
+    # --feature_columns is expected to be a plain
+    # text file with a column label on each line
+    with open(filename, 'rt') as f:
+        cols = f.readlines()
+
+    cols = [c.strip() for c in cols]
+    cols = [c for c in cols if c != '']
+
+    return cols

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
+set -e
+
 envdir=${1}
 
-channels=(-c https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/development/
-          -c https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/
+channels=(-c https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/
           -c conda-forge)
 
 conda create -y ${channels[@]}   \
@@ -25,6 +26,7 @@ conda create -y ${channels[@]}   \
       pytest                     \
       pytest-cov                 \
       python=3.11                \
+      r-base                     \
       scikit-learn               \
       scipy                      \
       spectrum

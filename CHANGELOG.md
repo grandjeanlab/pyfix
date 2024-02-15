@@ -1,5 +1,13 @@
 This file contains the pyFIX release history in reverse chronological order.
 
+
+# 0.6.0 (Thursday 15th February 2024)
+
+ - New `convert_fix_model` script which will convert an old FIX `.RData`
+   model file into a pyFIX model file. Note that this script requires
+   R to be installed.
+
+
 # 0.5.0 (Tuesday 13th February 2024)
 
  - Adjust pyFIX so that it can be used on existing data sets (where features
