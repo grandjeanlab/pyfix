@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# test_io.py -
+# test_io.py - Test pyfix.io routines.
 #
 # Author: Paul McCarthy <pauldmccarthy@gmail.com>
 #
@@ -42,7 +42,8 @@ def test_read_save_features():
         df = io.read_features('features.csv')
         check_equal(df, refdf)
 
-        # all features, no column headers in file
+        # all features, no column headers in file;
+        # should be labelled as pyfix features
         refdf.to_csv('features.csv', header=None, index=None)
         df = io.read_features('features.csv')
         check_equal(df, refdf)
@@ -62,6 +63,7 @@ def test_read_save_features():
         check_equal(df, refdf)
 
         # all features with old FIX column headers
+        # should be renamed to pyfix columns
         refdf.rename(columns=oldfix_mapping).to_csv('features.csv', index=None)
         df = io.read_features('features.csv')
         check_equal(df, refdf)
@@ -75,7 +77,6 @@ def test_read_features_partial():
     # pyfix label -> old fix label
     oldfix_mapping = {v : k for k, v in legacy.LEGACY_FEATURE_LABELS.items()}
     pyfix_labels   = feature.FEATURE_LABELS
-    oldfix_labels  = [oldfix_mapping[l] for l in pyfix_labels]
     nfeatures      = len(pyfix_labels)
     nics           = 20
 
@@ -94,31 +95,39 @@ def test_read_features_partial():
             labels    = list(refsubdf.columns)
             oldlabels = [oldfix_mapping[l] for l in labels]
 
-            # Save file without column headers -
-            # should raise an error
+            # Save file without column headers, then
+            # try to read without specifying expected
+            # columns - should raise an error,
             refsubdf.to_csv('features.csv', index=None, header=None)
             with pytest.raises(RuntimeError):
                 io.read_features('features.csv')
 
-            # but should be fine if we specify column headers
+            # but should be fine if we specify expected
+            # column headers
             df = io.read_features('features.csv', columns=labels)
             check_equal(df, refsubdf)
 
-            # Save file with column headers - should
-            # load fine, but obviously will not contain
-            # the missing features
+            # Save file with column headers - same as above -
+            # should error unless we specify expected columns
             refsubdf.to_csv('features.csv', index=None)
-            df = io.read_features('features.csv')
-            check_equal(df, refsubdf)
+            with pytest.raises(RuntimeError):
+                df = io.read_features('features.csv')
+
             df = io.read_features('features.csv', columns=labels)
             check_equal(df, refsubdf)
 
-            # save file with old fix column headers
-            refsubdf.rename(columns=oldfix_mapping).to_csv('features.csv',
-                                                           index=None)
-            df = io.read_features('features.csv')
-            check_equal(df, refsubdf)
+            # save file with old fix column headers - same
+            # behaviour as above
+            refsubdf.rename(columns=oldfix_mapping).to_csv(
+                'features.csv', index=None)
+
+            with pytest.raises(RuntimeError):
+                df = io.read_features('features.csv')
+
+            # We should be able to specify expected columns
+            # using  either pyfix or old fix feature names
             df = io.read_features('features.csv', columns=labels)
             check_equal(df, refsubdf)
+
             df = io.read_features('features.csv', columns=oldlabels)
             check_equal(df, refsubdf)

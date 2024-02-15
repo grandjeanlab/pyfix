@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# test_feature_subset.py -
+# test_feature_subset.py - Test training a pyfix model on a subset of features
 #
 # Author: Paul McCarthy <pauldmccarthy@gmail.com>
 #

@@ -56,3 +56,6 @@ omit    = ["pyfix/tests/*"]
 [tool.pytest.ini_options]
 testpaths = ["pyfix/tests"]
 addopts   = "-v --cov=pyfix --showlocals --import-mode=importlib --durations=0"
+markers   = [
+  "need_r: Needs R to be installed"
+]

@@ -12,3 +12,5 @@ The pyfix test data is taken from a couple of different sources:
     rest.ica.zip, with a few different variants of "fix -a". A ROI of the
     cleaned 4D data is stored to save space - the ROI parameters are stored in
     fslroi_params.txt.
+  - training.RData is an original FIX model trained on the first five subjects
+    from the "Standard" FIX training data set.

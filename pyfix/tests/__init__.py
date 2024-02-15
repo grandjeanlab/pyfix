@@ -16,6 +16,7 @@ DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
 FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
 TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
 TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
+TRAINING_RDATA_MODEL = op.join(DATADIR, 'training.RData')
 CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
 
 
