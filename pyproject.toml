@@ -44,7 +44,13 @@ include = ["pyfix*"]
 exclude = ["examples"]
 
 [tool.setuptools.package-data]
-pyfix = ["VERSION", "resources/*", "resources/masks/*", "resources/models/*", "examples/*"]
+pyfix = [
+  "VERSION",
+  "resources/*",
+  "resources/masks/**/sag_mask*nii.gz",
+  "resources/models/*"
+]
+
 
 [tool.setuptools.dynamic]
 version = {attr = "pyfix.__version__"}
