@@ -573,7 +573,7 @@ def read_features(path    : str,
     if any(c not in feature.FEATURE_LABELS for c in columns):
         raise ValueError('Unrecognised features requested: {columns}')
 
-    log.debug(f'Loading {len(columns)} from feature file {path}')
+    log.debug(f'Loading {len(columns)} features from feature file {path}')
 
     # Load feature file, and check
     # whether we have column labels
