@@ -187,7 +187,7 @@ def run_train(meldir          : List[str],
 
     file_table = io.generate_file_table(*meldir)
 
-    #  save file table
+    # save file table
     io.save_file_table(basename, file_table)
 
     # read and collate all features into a training table
@@ -371,10 +371,21 @@ def run_apply(labels     : str,
         )
 
 
-def run_main(**kwargs):
-    run_feature_extraction(**kwargs)
-    kwargs['labels'] = run_classify(**kwargs)
-    run_apply(**kwargs)
+def run_main(meldir    : str,
+             model     : str,
+             threshold : int,
+             species   : str = None,
+             **kwargs):
+
+    # The species is saved in a model file, so if
+    # it hasn't been specified on the CLI, default
+    # to whatever is stored in the model file.
+    if species is None:
+        species = io.load_model(model).species
+
+    run_feature_extraction(meldir, species, **kwargs)
+    labels = run_classify(meldir, model, threshold, **kwargs)
+    run_apply(labels, meldir, **kwargs)
 
 
 def setup_logging(logfile, argv):
@@ -469,6 +480,7 @@ def main(argv=None):
     main_parser.add_argument('model', metavar='<training.pyfix_model>')
     main_parser.add_argument('threshold', metavar='<thresh>', type=int,
                              nargs='?')
+    main_parser.add_argument('-s', '--species')
     main_parser.add_argument('-m', '--motion', action='store_true')
     main_parser.add_argument('-h', '--highpass', metavar='<highpass>',
                              type=float, default=-1.0)
