@@ -9,6 +9,9 @@ This file contains the pyFIX release history in reverse chronological order.
    had been accidentally omitted in the previous two versions.
  - Built-in models can now be referred to by their alias (as specified in
    `pyfix/resources/models/info.json`), or their file name prefix.
+ - The species ID that is specified during feature extraction/training, and
+   saved in model files, is used when running feature extraction,
+   classification, and clean-up.
 
 
 # 0.6.0 (Thursday 15th February 2024)
