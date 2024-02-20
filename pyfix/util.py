@@ -58,10 +58,14 @@ def get_resource(name) -> str:
 
 
 def list_models() -> List[str]:
+    """Return a list of the names of all built-in pyFIX models. """
     modeldir   = op.join(get_resource_path(), 'models')
-    modelfiles = glob.glob(op.join(modeldir, '*.pyfix_model'))
-    modelfiles = [op.splitext(op.basename(f))[0] for f in modelfiles]
-    return sorted(modelfiles)
+    info       = op.join(modeldir, 'info.json')
+
+    with open(info, 'rt') as f:
+        info = json.loads(f.read())
+
+    return sorted(info.keys())
 
 
 def get_mask(name : str, species : str = None) -> str:
@@ -71,12 +75,27 @@ def get_mask(name : str, species : str = None) -> str:
 
 
 def get_builtin_model(name : str) -> dict:
+    """Retrieve information about a built-in pyFIX model, given its
+    name as listed in info.json, or its model file name prefix.
+    """
 
     modelpath = op.join(get_resource_path(), 'models')
     info      = op.join(modelpath, 'info.json')
 
     with open(info, 'rt') as f:
         info = json.loads(f.read())
+
+    # name is not listed in info.json - see if
+    # it is the prefix of any model file names
+    if name not in info:
+        for model_name, model_info in info.items():
+            fname = model_info['file']
+            fname = op.splitext(op.basename(fname))[0]
+            if name == fname:
+                name = model_name
+                break
+        else:
+            raise KeyError(f'No built in model with name {name}')
 
     info         = info[name]
     info['file'] = op.join(modelpath, info['file'])

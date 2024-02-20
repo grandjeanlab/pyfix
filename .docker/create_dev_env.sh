@@ -29,7 +29,9 @@ conda create -y ${channels[@]}   \
       r-base                     \
       scikit-learn               \
       scipy                      \
-      spectrum
+      spectrum                   \
+      xgboost                    \
+      optuna
 
 echo "channels:"                                                        > ${envdir}/.condarc
 echo "  https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/development/" >> ${envdir}/.condarc

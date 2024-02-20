@@ -1,6 +1,19 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
+# 0.7.0 (Tuesday 20th February 2024)
+
+ - New pre-trained `NHP_HCP_MacaqueCyno` model, for NHP-HCP BOLD fMRI of *Macaca
+   fascicularis*, provided by Takuya Hayashi.
+ - Added the macaque mask images used with the `NHP_HCP_Macaque` model, as they
+   had been accidentally omitted in the previous two versions.
+ - Built-in models can now be referred to by their alias (as specified in
+   `pyfix/resources/models/info.json`), or their file name prefix.
+ - The species ID that is specified during feature extraction/training, and
+   saved in model files, is used when running feature extraction,
+   classification, and clean-up.
+
+
 # 0.6.0 (Thursday 15th February 2024)
 
  - New `convert_fix_model` script which will convert an old FIX `.RData`

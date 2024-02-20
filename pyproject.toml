@@ -12,8 +12,8 @@ requires-python = ">=3.8"
 authors         = [{name = "Sean Fitzgibbon", email = "sean.fitzgibbon@ndcn.ox.ac.uk"}]
 dependencies    = [
   "cachetools",
-  "file_tree",
-  "fslpy >=3.16.1",
+  "file-tree",
+  "fslpy >=3.17",
   "jinja2",
   "joblib",
   "matplotlib",
@@ -44,7 +44,13 @@ include = ["pyfix*"]
 exclude = ["examples"]
 
 [tool.setuptools.package-data]
-pyfix = ["VERSION", "resources/*", "resources/masks/*", "resources/models/*", "examples/*"]
+pyfix = [
+  "VERSION",
+  "resources/*",
+  "resources/masks/**/sag_mask*nii.gz",
+  "resources/models/*"
+]
+
 
 [tool.setuptools.dynamic]
 version = {attr = "pyfix.__version__"}

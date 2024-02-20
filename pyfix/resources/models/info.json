@@ -18,7 +18,10 @@
         "file" : "HCP7T_hp2000.pyfix_model"
     },
     "NHP_HCP_Macaque" : {
-        "file" : "NCPHCP_Macaque_RIKEN30SRFIX.pyfix_model"
+        "file" : "NHPHCP_Macaque_RIKEN30SRFIX.pyfix_model"
+    },
+    "NHP_HCP_MacaqueCyno" : {
+        "file" : "NHPHCP_MacaqueCyno_BOLD.pyfix_model"
     },
     "HCP_Style_Single_Multirun_Dedrift" : {
         "file" : "HCP_Style_Single_Multirun_Dedrift.pyfix_model"
