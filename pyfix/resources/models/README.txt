@@ -40,6 +40,9 @@ associated settings.
    Session=102min, no spatial smoothing, minimal (2000s FWHM) highpass
    temporal filtering.
 
+ - NHPHCP_MacaqueCyno_BOLD.pyfix_model: derived from NHP-HCP Cynomolgus
+   Macaque data.
+
 The data and hand labels for these models have been contributed by a large
 number of people, including:
 
