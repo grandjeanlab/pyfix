@@ -85,8 +85,10 @@ FEATURE_EXTRACTORS = {}
 
 
 # TODO: allow feature_extractor decororater to define which content from FixData is required
-def feature_extractor(func):
-    name = func.__name__
+def feature_extractor(func, name=None, register=True):
+
+    if name is None:
+        name = func.__name__
 
     def wrapper(*args, **kwargs):
 
@@ -107,8 +109,9 @@ def feature_extractor(func):
 
         return output
 
-    log.debug('Registering function: %s', name)
-    FEATURE_EXTRACTORS[name] = wrapper
+    if register:
+        log.debug('Registering function: %s', name)
+        FEATURE_EXTRACTORS[name] = wrapper
 
     return wrapper
 
