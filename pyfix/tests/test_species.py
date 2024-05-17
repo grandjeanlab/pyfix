@@ -7,6 +7,9 @@
 
 import            glob
 import os.path as op
+import            os
+
+import            shutil
 
 from unittest import mock
 
@@ -24,10 +27,19 @@ from pyfix.tests import (TRAINDATA_ARCHIVE,
 def test_get_mask():
     rdir = util.get_resource_path()
     mdir = op.join(rdir, 'masks')
-    assert util.get_mask('sag_mask0')               == op.join(mdir, 'sag_mask0')
-    assert util.get_mask('sag_mask0', '')           == op.join(mdir, 'sag_mask0')
-    assert util.get_mask('sag_mask0', 'mni152_1mm') == op.join(mdir, 'sag_mask0')
-    assert util.get_mask('sag_mask0', 'macaque')    == op.join(mdir, 'macaque', 'sag_mask0')
+    assert util.get_mask('sag_mask0')               == op.join(mdir, 'sag_mask0.nii.gz')
+    assert util.get_mask('sag_mask0', '')           == op.join(mdir, 'sag_mask0.nii.gz')
+    assert util.get_mask('sag_mask0', 'mni152_1mm') == op.join(mdir, 'sag_mask0.nii.gz')
+    assert util.get_mask('sag_mask0', 'macaque')    == op.join(mdir, 'macaque', 'sag_mask0.nii.gz')
+
+    with tempdir():
+        spdir = op.abspath('random_species')
+        os.mkdir(spdir)
+
+        for mfile in glob.glob(op.join(mdir, 'sag_mask*')):
+            shutil.copy(mfile, spdir)
+
+        assert util.get_mask('sag_mask0', spdir) == op.join(spdir, 'sag_mask0.nii.gz')
 
 
 def test_fix_species_read_from_model():
