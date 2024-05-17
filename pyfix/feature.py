@@ -85,8 +85,10 @@ FEATURE_EXTRACTORS = {}
 
 
 # TODO: allow feature_extractor decororater to define which content from FixData is required
-def feature_extractor(func):
-    name = func.__name__
+def feature_extractor(func, name=None, register=True):
+
+    if name is None:
+        name = func.__name__
 
     def wrapper(*args, **kwargs):
 
@@ -107,8 +109,9 @@ def feature_extractor(func):
 
         return output
 
-    log.debug('Registering function: %s', name)
-    FEATURE_EXTRACTORS[name] = wrapper
+    if register:
+        log.debug('Registering function: %s', name)
+        FEATURE_EXTRACTORS[name] = wrapper
 
     return wrapper
 
@@ -923,9 +926,12 @@ def _create_sag_masks(data,
 
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
-        log.info('Affine registration of native structural to standard (MNI152)')
 
-        ref        = get_standard('brain', resolution=1)
+        ref = get_standard('brain', resolution=1)
+
+        log.info('Affine registration of native '
+                 'structural to standard (%s)', ref)
+
         struct2std = data.fix_tree.get('struct2std')
         std2struct = data.fix_tree.get('std2struct')
         flirt(
