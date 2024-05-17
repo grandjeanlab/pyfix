@@ -11,6 +11,8 @@ from typing import List, Tuple
 
 import nibabel as nb
 import numpy as np
+import fsl.utils.path as fslpath
+import fsl.data.image as fslimage
 
 
 def weak_import(name):
@@ -71,7 +73,30 @@ def list_models() -> List[str]:
 def get_mask(name : str, species : str = None) -> str:
     if species in (None, 'mni152_1mm'):
         species = ''
-    return op.join(get_resource_path(), 'masks', species, name)
+
+    # species may either be the name of a
+    # built-in mask data set (None/mni152_1mm
+    # for the default set), or a path to an
+    # external mask data set
+    maskdir = op.join(get_resource_path(), 'masks', species)
+    if op.exists(maskdir):
+        fname = op.join(maskdir, name)
+
+    # assume that species is a path to an
+    # external mask data set
+    else:
+        fname = op.join(species, name)
+
+    # add extension to file name, and
+    # make sure the file exists
+    try:
+        fname = fslimage.addExt(fname)
+    except fslpath.PathError:
+        raise RuntimeError(f'Cannot find mask image with name {name}'
+                           f'(species {species}): {fname}')
+
+    return fname
+
 
 
 def get_builtin_model(name : str) -> dict:
