@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 
-import            io
-import            os
-import os.path as op
-import            shlex
-import            sys
-import            zipfile
+import               collections
+import               contextlib
+import functools  as ft
+import               io
+import               os
+import os.path    as op
+import               shlex
+import               sys
+import               zipfile
+from unittest import mock
 
-from pyfix import fix
+from pyfix import fix, feature
 from pyfix.util import indir
 
 
@@ -91,3 +95,38 @@ def unzip(infile, destdir=None):
 
 def main(cmd=''):
     return fix.main(shlex.split(cmd))
+
+
+@contextlib.contextmanager
+def mock_features(feature_hook=None):
+
+    def mock_feature_func(nvals, data, ic_idx):
+
+        if feature_hook is not None:
+            feature_hook(data, ic_idx)
+
+        if nvals == 0: return 0
+        else:          return [0] * nvals
+
+    feature_columns = collections.defaultdict(list)
+    for label in feature.FEATURE_LABELS:
+        prefix = label.split(':')[0]
+        feature_columns[prefix].append(label)
+
+    def num_values_for_feature(cols):
+        if len(cols) == 1 and len(cols[0].split(':')) == 1:
+            return 0
+        return len(cols)
+
+
+    funcs = {}
+    for label, columns in feature_columns.items():
+
+        nvals = num_values_for_feature(columns)
+
+        mff = ft.partial(mock_feature_func, nvals)
+        mff = feature.feature_extractor(mff, name=label, register=False)
+        funcs[label] = mff
+
+    with mock.patch('pyfix.feature.FEATURE_EXTRACTORS', funcs):
+        yield
