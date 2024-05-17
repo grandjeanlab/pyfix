@@ -1,5 +1,10 @@
 This file contains the pyFIX release history in reverse chronological order.
 
+# 0.8.0 (Friday 17th May 2024)
+
+ - A directory containing custom mask images for feature extraction can be
+   passed via the `--species` argument.
+
 
 # 0.7.0 (Tuesday 20th February 2024)
 
