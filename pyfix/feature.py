@@ -923,9 +923,12 @@ def _create_sag_masks(data,
 
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
-        log.info('Affine registration of native structural to standard (MNI152)')
 
-        ref        = get_standard('brain', resolution=1)
+        ref = get_standard('brain', resolution=1)
+
+        log.info('Affine registration of native '
+                 'structural to standard (%s)', ref)
+
         struct2std = data.fix_tree.get('struct2std')
         std2struct = data.fix_tree.get('std2struct')
         flirt(
