@@ -85,7 +85,7 @@ Usage for each stage separately, including creation of training data:
     classifictions.  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
-  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A]
+  fix -a <labels.txt> [<mel.ica>] [-m [-h <highpass>]] [-A]
 
     Apply cleanup, using artefacts listed in the .txt file, to the data inside
     the enclosing Feat/Melodic directory.
@@ -93,20 +93,19 @@ Usage for each stage separately, including creation of training data:
     If <mel.ica> is not provided, it is assumed that <labels.txt> is contained
     within <mel.ica>.
 
-    -h -1          apply no highpass filtering.
-    -h 0           apply linear detrending only.
-    -h <highpass>  with a positive <highpass> value, apply highpass with
-                   <highpass> being full-width (2*sigma) in seconds.
+    -m  optionally also cleanup motion confounds, with highpass filtering of
+        motion confounds controlled by -h:
+         - if -h is omitted, fix will look to see if a design.fsf file is
+           present, to find the highpass cutoff.
+         - if -h is omitted, and no design.fsf is present, no filtering of the
+           motion confounds will take place.
+         - -h -1 apply no highpass filtering.
+         - -h 0 apply linear detrending only.
+         - -h <highpass> with a positive <highpass> value, apply highpass with
+           <highpass> being full-width (2*sigma) in seconds.
 
-    -m             optionally also cleanup motion confounds, with highpass
-                   filtering of motion confounds controlled by -h:
-                    - if -h is omitted, fix will look to see if a design.fsf
-                      file is present, to find the highpass cutoff.
-                    - if -h is omitted, and no design.fsf is present, no
-                      filtering of the motion confounds will take place.
-
-    -A             apply aggressive (full variance) cleanup, instead of the
-                   default less-aggressive (unique variance) cleanup.
+    -A  apply aggressive (full variance) cleanup, instead of the default less-
+        aggressive (unique variance) cleanup.
 
 The following built-in models can be used for classification:
 """ + '\n'.join(f' - {m}' for m in list_models())
@@ -324,12 +323,22 @@ def run_apply(labels     : str,
 
     tr = clean.get_tr(nifti_filt)
 
+    # highpass only relevant when
+    # adding motion confounds
+    if motion and (highpass is not None):
+        log.warning('Ignoring the -h/--highpass option - it is only used '
+                    'when cleaning motion confounds (with -m / --motion)')
+
     # highpass settings (get from FSF is present and highpass not provided)
     fsf = ftree.get('design')
     if (highpass is None) and op.exists(fsf):
         fsf = featanalysis.loadFsf(fsf)
         if int(fsf['temphp_yn']) == 1:
             highpass = float(fsf['paradigm_hp'])
+
+    # -h -1 -> disable highpass
+    if highpass == -1:
+        highpass = None
 
     # clean filtered_func_data.nii.gz
     clean.apply(
@@ -483,7 +492,7 @@ def main(argv=None):
     main_parser.add_argument('-s', '--species')
     main_parser.add_argument('-m', '--motion', action='store_true')
     main_parser.add_argument('-h', '--highpass', metavar='<highpass>',
-                             type=float, default=-1.0)
+                             type=float, default=None)
     main_parser.add_argument('-A', '--aggressive', action='store_true')
 
     # FEATURE parser
@@ -532,7 +541,7 @@ def main(argv=None):
     apply_parser.add_argument('meldir', metavar='<mel.ica>', nargs='?')
     apply_parser.add_argument('-m', '--motion', action='store_true')
     apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
-                              type=float)
+                              type=float, default=None)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
 
     if argv is None:

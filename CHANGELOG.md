@@ -1,5 +1,13 @@
 This file contains the pyFIX release history in reverse chronological order.
 
+
+# 0.8.1 (Friday 5th July 2024)
+
+ - Fixed the default behaviour of the `-h` option - when omitted, the default
+   behaviour should be to read the highpass threshold from `design.fsf` (if present).
+   But highpass-filtering was being skipped by default.
+
+
 # 0.8.0 (Friday 17th May 2024)
 
  - A directory containing custom mask images for feature extraction can be
