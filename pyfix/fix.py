@@ -323,6 +323,12 @@ def run_apply(labels     : str,
 
     tr = clean.get_tr(nifti_filt)
 
+    # highpass only relevant when
+    # adding motion confounds
+    if motion and (highpass is not None):
+        log.warning('Ignoring the -h/--highpass option - it is only used '
+                    'when cleaning motion confounds (with -m / --motion)')
+
     # highpass settings (get from FSF is present and highpass not provided)
     fsf = ftree.get('design')
     if (highpass is None) and op.exists(fsf):
