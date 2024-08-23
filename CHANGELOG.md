@@ -1,6 +1,12 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
+# 0.8.2 (Friday 23rd August 2024)
+
+ - Fixed a bug which was occurring when using FIX to de-noise CIfTI data without
+   high-pass filtering.
+
+
 # 0.8.1 (Friday 5th July 2024)
 
  - Fixed the default behaviour of the `-h` option - when omitted, the default
