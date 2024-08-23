@@ -78,9 +78,11 @@ def highpass_filter(func, temporal_fwhm, tr, tmpdir=None, retain_mean=False):
 
     """
 
+    if temporal_fwhm is None:
+        raise ValueError('A FWHM value is required')
+
     # convert temporal_fwhm (s) to sigma (vols)
-    if temporal_fwhm is not None:
-        sigma = temporal_fwhm / (2 * tr)
+    sigma = temporal_fwhm / (2 * tr)
 
     log.info(f'Highpass filter: fwhm={temporal_fwhm}s, sigma={sigma} TRs')
 

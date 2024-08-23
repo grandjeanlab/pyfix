@@ -363,8 +363,11 @@ def run_apply(labels     : str,
         dd = nb.load(cifti)
         d0_tr = clean.get_tr(dd)
         d0, mask0 = clean.get_fdata(dd)
-        d0 = clean.highpass_filter(
-            d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
+
+        if highpass is not None:
+            d0 = clean.highpass_filter(
+                d0, highpass, d0_tr, tmpdir=meldir, retain_mean=True)
+
         clean.save_image(dd, d0, mask0, fname=cifti_filt)
 
         clean.apply(
