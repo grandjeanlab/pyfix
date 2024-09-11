@@ -576,8 +576,8 @@ def zstattofuncratio(data, ic_idx):
     img_ratio = data.fix_tree.get('img_ratio')
     img_mult  = data.fix_tree.get('img_mult')
 
-    fslmaths(icmap).smooth(5).abs().div(func_mean).run(img_ratio)
-    fslmaths(icmap).smooth(5).abs().mul(func_mean).run(img_mult)
+    fslmaths(icmap).smooth(5).div(func_mean).abs().run(img_ratio)
+    fslmaths(icmap).smooth(5).mul(func_mean).abs().run(img_mult)
 
     img_ratio = nb.load(img_ratio).get_fdata()
     img_mult  = nb.load(img_mult) .get_fdata()

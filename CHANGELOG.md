@@ -1,10 +1,13 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
+# 0.9.0 (xx)
+
+ - Fixed a bug in calculation of the `zstattofuncratio` feature (reported by Takuya Hayashi).
+
 # 0.8.2 (Friday 23rd August 2024)
 
- - Fixed a bug which was occurring when using FIX to de-noise CIfTI data without
-   high-pass filtering.
+ - Fixed a bug which was occurring when using FIX to de-noise CIfTI data without high-pass filtering (reported by Burke Rosen).
 
 
 # 0.8.1 (Friday 5th July 2024)
