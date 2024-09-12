@@ -326,7 +326,6 @@ class FixData:
                 'dseg': NiftiMap(dseg, xfm=struct2func_xfm),
                 'brainmask': NiftiMap(func_brainmask),
                 'struct': NiftiMap(struct, xfm=struct2func_xfm),
-                # 'standard': NiftiMap(standard, xfm=std2func_xfm)
             },
             hp_fwhm=highpass_fwhm,
             input=NiftiTimeCourse(func, fs=1 / tr),
