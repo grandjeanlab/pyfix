@@ -927,13 +927,19 @@ def _create_sag_masks(data,
     # create standard_to_func transform if it does not exist
     if standard2func_tx is None:
 
-        ref = get_standard('brain', resolution=1)
+        ref        = data.input_tree.get('standard')
+        struct2std = data.fix_tree  .get('struct2std')
+        std2struct = data.fix_tree  .get('std2struct')
 
-        log.info('Affine registration of native '
-                 'structural to standard (%s)', ref)
+        # fall back to configured FSL standard if
+        # reg/standard does not exist in the input
+        # data.
+        if not op.exists(ref):
+            ref = get_standard('brain', resolution=1)
 
-        struct2std = data.fix_tree.get('struct2std')
-        std2struct = data.fix_tree.get('std2struct')
+        log.info('Affine registration of native structural '
+                 '(%s) to standard (%s)', struct, ref)
+
         flirt(
             src=struct,
             ref=ref,
@@ -951,7 +957,6 @@ def _create_sag_masks(data,
             )
 
         elif struct2func_xfm.endswith('.nii.gz'):
-
             standard2func_tx = data.fix_tree.get('std2func_warp')
             convertwarp(
                 ref=func,

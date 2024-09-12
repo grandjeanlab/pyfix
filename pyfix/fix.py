@@ -85,7 +85,7 @@ Usage for each stage separately, including creation of training data:
     classifictions.  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
-  fix -a <labels.txt> [<mel.ica>] [-m [-h <highpass>]] [-A]
+  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A]
 
     Apply cleanup, using artefacts listed in the .txt file, to the data inside
     the enclosing Feat/Melodic directory.
@@ -94,12 +94,14 @@ Usage for each stage separately, including creation of training data:
     within <mel.ica>.
 
     -m  optionally also cleanup motion confounds, with highpass filtering of
-        motion confounds controlled by -h:
-         - if -h is omitted, fix will look to see if a design.fsf file is
-           present, to find the highpass cutoff.
+        motion confounds controlled by -h
+
+    -h  Highpass filtering of motion confounds and CIfTI time series data.
+         - if -h is omitted, fix will use the highpass cutoff in a design.fsf
+           file, ifpresent.
          - if -h is omitted, and no design.fsf is present, no filtering of the
-           motion confounds will take place.
-         - -h -1 apply no highpass filtering.
+           motion confounds or CIfTI data will take place.
+         - If -h -1, no highpass filtering will be performed.
          - -h 0 apply linear detrending only.
          - -h <highpass> with a positive <highpass> value, apply highpass with
            <highpass> being full-width (2*sigma) in seconds.
@@ -322,12 +324,6 @@ def run_apply(labels     : str,
     ddremove = io.read_labels(labels)
 
     tr = clean.get_tr(nifti_filt)
-
-    # highpass only relevant when
-    # adding motion confounds
-    if motion and (highpass is not None):
-        log.warning('Ignoring the -h/--highpass option - it is only used '
-                    'when cleaning motion confounds (with -m / --motion)')
 
     # highpass settings (get from FSF is present and highpass not provided)
     fsf = ftree.get('design')
