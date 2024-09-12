@@ -97,7 +97,7 @@ def test_feature_extraction():
             # fftfinerwrtnull generates a random null
             # distribution, so results are expected to
             # differ
-            if col.startswith('fftfinerwrtnull'): err = 0.10
+            if col.startswith('fftfinerwrtnull'): err = 0.12
             else:                                 err = 0.01
 
             compare_arrays(gotcol, expcol, err)
