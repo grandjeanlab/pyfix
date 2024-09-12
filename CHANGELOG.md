@@ -1,9 +1,10 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
-# 0.9.0 (xx)
+# 0.8.3 (Friday 13th September 2024)
 
- - Fixed a bug in calculation of the `zstattofuncratio` feature (reported by Takuya Hayashi).
+ - Corrected/clarified usage of the `-h` with respect to the filtering of CIfTI time series data.
+ - Fixed a bug in calculation of the `zstattofuncratio` feature (reported and fixed by Takuya Hayashi).
 
 # 0.8.2 (Friday 23rd August 2024)
 
