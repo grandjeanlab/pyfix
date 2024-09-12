@@ -15,13 +15,15 @@ from pyfix import fix, feature
 from pyfix.util import indir
 
 
-DATADIR              = op.join(op.dirname(__file__), 'testdata')
-DATA_ARCHIVE         = op.join(DATADIR, 'rest.ica.zip')
-FIXDIR_ARCHIVE       = op.join(DATADIR, 'rest.ica.fixdir.zip')
-TRAINDATA_ARCHIVE    = op.join(DATADIR, 'training_data.zip')
-TRAINED_MODEL        = op.join(DATADIR, 'training.pyfix_model')
-TRAINING_RDATA_MODEL = op.join(DATADIR, 'training.RData')
-CLEANED_DATA_ARCHIVE = op.join(DATADIR, 'cleaned_data.zip')
+DATADIR               = op.join(op.dirname(__file__), 'testdata')
+DATA_ARCHIVE          = op.join(DATADIR, 'rest.ica.zip')
+CIFTI_FILE            = op.join(DATADIR, 'Atlas.dtseries.nii')
+FIXDIR_ARCHIVE        = op.join(DATADIR, 'rest.ica.fixdir.zip')
+TRAINDATA_ARCHIVE     = op.join(DATADIR, 'training_data.zip')
+TRAINED_MODEL         = op.join(DATADIR, 'training.pyfix_model')
+TRAINING_RDATA_MODEL  = op.join(DATADIR, 'training.RData')
+CLEANED_DATA_ARCHIVE  = op.join(DATADIR, 'cleaned_data.zip')
+CLEANED_CIFTI_ARCHIVE = op.join(DATADIR, 'cleaned_cifti.zip')
 
 
 class CaptureStdout:

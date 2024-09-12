@@ -14,6 +14,7 @@ import              shutil
 
 import numpy   as np
 import pandas  as pd
+import nibabel as nib
 
 from fsl.data.image     import Image
 from fsl.data.fixlabels import loadLabelFile
@@ -31,7 +32,9 @@ from pyfix.tests        import (main,
                                 FIXDIR_ARCHIVE,
                                 TRAINDATA_ARCHIVE,
                                 TRAINED_MODEL,
-                                CLEANED_DATA_ARCHIVE)
+                                CLEANED_DATA_ARCHIVE,
+                                CIFTI_FILE,
+                                CLEANED_CIFTI_ARCHIVE)
 
 
 def compare_arrays(got, exp, err=0.01):
@@ -45,8 +48,8 @@ def compare_4D_data(got, exp, err=0.01, corr=0.99):
     assert np.all(got.shape == exp.shape)
     compare_arrays(got, exp, err)
 
-    got      = got.reshape(-1, got.shape[3])
-    exp      = exp.reshape(-1, exp.shape[3])
+    got      = got.reshape(-1, got.shape[-1])
+    exp      = exp.reshape(-1, exp.shape[-1])
     nvoxels  = got.shape[0]
     corrs    = np.zeros(nvoxels)
 
@@ -203,6 +206,35 @@ def test_cleanup():
                 gotmotfilt = Image(gotmotfilt).data
                 expmotfilt = Image(expmotfilt).data
                 compare_4D_data(gotmotfilt, expmotfilt)
+
+
+def test_cleanup_cifti():
+    """Test cleaning commands on a dataset containing CIfTI time series. """
+
+    flag_variants = ['-h -1', '-h 10', '-m -h -1', '-m -h 10']
+
+    for flags in flag_variants:
+        with tempdir():
+            unzip(DATA_ARCHIVE)
+            unzip(CLEANED_CIFTI_ARCHIVE)
+            shutil.copy(CIFTI_FILE, 'rest.ica')
+
+            meldir    = io.InputDirectory.from_input_dir('rest.ica')
+            labelfile = meldir.input_tree.get('hand_labels')
+
+            main(f'-a {labelfile} {flags}')
+
+            cleandir   = ('clean' + ' ' + flags).strip()
+            cleandir   = cleandir.replace(' ', '_')
+            got        = meldir.input_tree.get('cifti_clean')
+            exp        = op.join(cleandir, op.basename(got))
+
+            got   = nib.load(got).get_fdata()
+            exp   = nib.load(exp).get_fdata()
+
+            assert np.all(got.shape == exp.shape)
+            compare_arrays( got, exp)
+            compare_4D_data(got, exp)
 
 
 def test_full_run():

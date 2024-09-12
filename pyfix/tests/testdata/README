@@ -1,7 +1,11 @@
 The pyfix test data is taken from a couple of different sources:
 
   - rest.ica.zip contains a MELODIC analysis performed on the "nice" data set
-    from the FSL Course FMRI 3 practical.
+    from the FSL Course FMRI 3 practical
+  - Atlas.dtseries.nii is some hand-created CIfTI time series data with the
+    same number of time points as the fMRI data in rest.ica.zip. The data
+    in this file is from the raw fMRI data from voxels (53, 11, 27), (48, 7, 42),
+    (31, 17, 42), (33, 12, 27), (30, 78, 43), (30, 12, 32), and (32, 4, 29).
   - rest.ica.fixdir.zip contains the fix/ directory from running the original
     (MATLAB/R) version of FIX on rest.ica.zip
   - training_data.zip contains features.csv and hand_labels_noise.txt files,
