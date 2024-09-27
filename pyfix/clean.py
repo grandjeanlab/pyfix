@@ -315,9 +315,6 @@ def apply(func_fname,
           ):
     log.debug(locals())
 
-    # if (do_filter_func or do_filter_motparams) and (temporal_fwhm is None):
-    #     raise RuntimeError('temporal_fwhm required to filter func_d or motparams')
-
     if do_motion_regression and (motion_parameters is None):
         raise RuntimeError('motion parameters are required if do_motion_regression=True')
 
