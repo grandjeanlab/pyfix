@@ -7,27 +7,23 @@
 
 import              glob
 import itertools as it
-import              os
 import os.path   as op
-import              shlex
 import              shutil
 
 import numpy   as np
-import pandas  as pd
 import nibabel as nib
 
 from fsl.data.image     import Image
 from fsl.data.fixlabels import loadLabelFile
 from fsl.utils.tempdir  import tempdir
 
-from pyfix              import (fix,
-                                io,
-                                feature,
-                                legacy)
+from pyfix              import (io,
+                                feature)
 from pyfix.tests        import (main,
                                 unzip,
-                                indir,
-                                DATADIR,
+                                compare_arrays,
+                                compare_4D_data,
+                                crop,
                                 DATA_ARCHIVE,
                                 FIXDIR_ARCHIVE,
                                 TRAINDATA_ARCHIVE,
@@ -35,35 +31,6 @@ from pyfix.tests        import (main,
                                 CLEANED_DATA_ARCHIVE,
                                 CIFTI_FILE,
                                 CLEANED_CIFTI_ARCHIVE)
-
-
-def compare_arrays(got, exp, err=0.01):
-    exprange = exp.max() - exp.min()
-    maxerr   = np.abs(got - exp).max() / exprange
-    assert maxerr < err
-
-
-def compare_4D_data(got, exp, err=0.01, corr=0.99):
-
-    assert np.all(got.shape == exp.shape)
-    compare_arrays(got, exp, err)
-
-    got      = got.reshape(-1, got.shape[-1])
-    exp      = exp.reshape(-1, exp.shape[-1])
-    nvoxels  = got.shape[0]
-    corrs    = np.zeros(nvoxels)
-
-    for i in range(nvoxels):
-        corrs[i] = np.corrcoef(got[i], exp[i])[0, 1]
-
-    assert corrs.min() > corr
-
-
-def crop(data, params):
-    xlo, xlen, ylo, ylen, zlo, zlen = params[:6]
-    return data[xlo:xlo + xlen,
-                ylo:ylo + ylen,
-                zlo:zlo + zlen]
 
 
 def test_print_help():

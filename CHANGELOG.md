@@ -1,6 +1,11 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
+# 0.9.0 (Monday 30th September 2024)
+
+ - pyFIX now saves classifier probabilities to the `fix4melview` output file.
+ - Adjusted the data cleaning process so that if a  `mc/prefiltered_func_data_mcf_conf_hp.nii.gz` file exists, its contents are used as the motion confounds, rather than loading and high-pass filtering the MCFLIRT motion parameter estimates from `mc/prefiltered_func_data_mcf.par`.
+
 # 0.8.3 (Friday 13th September 2024)
 
  - Corrected/clarified usage of the `-h` with respect to the filtering of CIfTI time series data.

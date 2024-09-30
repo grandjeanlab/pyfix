@@ -315,9 +315,6 @@ def apply(func_fname,
           ):
     log.debug(locals())
 
-    # if (do_filter_func or do_filter_motparams) and (temporal_fwhm is None):
-    #     raise RuntimeError('temporal_fwhm required to filter func_d or motparams')
-
     if do_motion_regression and (motion_parameters is None):
         raise RuntimeError('motion parameters are required if do_motion_regression=True')
 
@@ -342,16 +339,24 @@ def apply(func_fname,
 
     # read and filter motion confounds (if req'func_d)
     if do_motion_regression:
-        raw, filt, motparams = motion_confounds(
-            motion_parameters=motion_parameters,
-            tr=func_tr,
-            temporal_fwhm=highpass,
-            retall=True)
-        # save raw/expanded, and HP filtered, motion parameters
-        if motparams_nifti_fname is not None:
-            create_dummy_nifti(raw, tr=func_tr, fname=motparams_nifti_fname)
-        if motparams_filt_fname is not None and highpass is not None:
-            create_dummy_nifti(filt, tr=func_tr, fname=motparams_filt_fname)
+        # motion parameters may have already been filtered
+        # and saved as NIfTI - load the file if it exists
+        if motparams_filt_fname is not None and op.exists(motparams_filt_fname):
+            motparams = get_fdata(nb.load(motparams_filt_fname))[0]
+            motparams = _normalise(motparams)
+
+        # Otherwise load and filter MCFLIRT results
+        else:
+            raw, filt, motparams = motion_confounds(
+                motion_parameters=motion_parameters,
+                tr=func_tr,
+                temporal_fwhm=highpass,
+                retall=True)
+            # save raw/expanded, and HP filtered, motion parameters
+            if motparams_nifti_fname is not None:
+                create_dummy_nifti(raw, tr=func_tr, fname=motparams_nifti_fname)
+            if motparams_filt_fname is not None and highpass is not None:
+                create_dummy_nifti(filt, tr=func_tr, fname=motparams_filt_fname)
 
     # beta for ICA (good *and* bad)
 

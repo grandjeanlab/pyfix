@@ -11,6 +11,11 @@ import               sys
 import               zipfile
 from unittest import mock
 
+import numpy as np
+
+from fsl.data.image      import Image
+from fsl.utils.image.roi import roi
+
 from pyfix import fix, feature
 from pyfix.util import indir
 
@@ -90,9 +95,13 @@ def link_directory(src, dest, exclude=None):
             os.symlink(op.join(src, filename), op.join(dest, filename))
 
 
-def unzip(infile, destdir=None):
+def unzip(infile, destdir=None, paths=None):
     with zipfile.ZipFile(infile) as f:
-        f.extractall(destdir)
+        if paths is None:
+            f.extractall(destdir)
+        else:
+            for path in paths:
+                f.extract(path, destdir)
 
 
 def main(cmd=''):
@@ -132,3 +141,42 @@ def mock_features(feature_hook=None):
 
     with mock.patch('pyfix.feature.FEATURE_EXTRACTORS', funcs):
         yield
+
+
+def compare_arrays(got, exp, err=0.01):
+    exprange = exp.max() - exp.min()
+    maxerr   = np.abs(got - exp).max() / exprange
+    assert maxerr < err
+
+
+def compare_4D_data(got, exp, err=0.01, corr=0.99):
+
+    assert np.all(got.shape == exp.shape)
+    compare_arrays(got, exp, err)
+
+    got      = got.reshape(-1, got.shape[-1])
+    exp      = exp.reshape(-1, exp.shape[-1])
+    nvoxels  = got.shape[0]
+    corrs    = np.zeros(nvoxels)
+
+    for i in range(nvoxels):
+        corrs[i] = np.corrcoef(got[i], exp[i])[0, 1]
+
+    assert corrs.min() > corr
+
+
+def crop(data, params):
+    xlo, xlen, ylo, ylen, zlo, zlen = params[:6]
+    return data[xlo:xlo + xlen,
+                ylo:ylo + ylen,
+                zlo:zlo + zlen]
+
+
+def crop_image(infile, outfile, params):
+
+    xlo, xlen, ylo, ylen, zlo, zlen = params[:6]
+    image   = Image(infile)
+    cropped = roi(image, [(xlo, xlo + xlen),
+                          (ylo, ylo + ylen),
+                          (zlo, zlo + zlen)])
+    cropped.save(outfile)

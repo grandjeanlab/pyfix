@@ -254,17 +254,24 @@ def run_classify(meldir     : str,
                            f'{model.filename} does not contain an optimal '
                            'threshold.')
 
-    y = legacy.prob_threshold(ypb, threshold=threshold / 100)
+    # threshold classifier probabilities
+    # for the signal class (column 1)
+    # so that signal==True and noise==False
+    y   = legacy.prob_threshold(ypb, threshold=threshold / 100, col=1)
 
     # Save generated labels to FIX label file.
     # Invert y so that signal==False and noise==True
     # (as per legacy fix4melview files)
     y          = ~y
+    ypb        = ypb[:, 1]
     labels     = [['Noise'] if i else ['Signal'] for i in y]
     label_file = intree \
                    .update(threshold=threshold, model=model.name) \
                    .get('fix_labels')
-    fixlabels.saveLabelFile(labels, label_file, meldir)
+    icadir     = intree.get('melodic_dir')
+    icadir     = op.relpath(icadir, meldir)
+
+    fixlabels.saveLabelFile(labels, label_file, icadir, probabilities=ypb)
 
     return label_file
 
