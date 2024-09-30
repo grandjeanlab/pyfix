@@ -268,7 +268,10 @@ def run_classify(meldir     : str,
     label_file = intree \
                    .update(threshold=threshold, model=model.name) \
                    .get('fix_labels')
-    fixlabels.saveLabelFile(labels, label_file, meldir, probabilities=ypb)
+    icadir     = intree.get('melodic_dir')
+    icadir     = op.relpath(icadir, meldir)
+
+    fixlabels.saveLabelFile(labels, label_file, icadir, probabilities=ypb)
 
     return label_file
 
