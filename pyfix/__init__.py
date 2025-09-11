@@ -1,3 +1,8 @@
 #!/usr/bin/env python
 
-__version__ = '0.9.0'
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("pyfix")
+except PackageNotFoundError:
+    __version__ = "<unknown>"
