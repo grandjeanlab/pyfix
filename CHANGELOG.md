@@ -1,6 +1,11 @@
 This file contains the pyFIX release history in reverse chronological order.
 
 
+# 0.10.0 (Monday 30th September 2024)
+
+ - The pyfix cleaning stage (`fix -a ...`) supports a new option which allows
+   only the NIfTI or CIfTI data (`filtered_func_data.nii.gz` or `Atlas.dtseries.nii`) to be cleaned (the default is to clean both).
+
 # 0.9.0 (Monday 30th September 2024)
 
  - pyFIX now saves classifier probabilities to the `fix4melview` output file.
