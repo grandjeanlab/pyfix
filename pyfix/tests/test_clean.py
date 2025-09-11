@@ -1,22 +1,26 @@
 #!/usr/bin/env python
 
 
-import os
+import            os
+import os.path as op
+import            shutil
 
-import numpy   as np
+import numpy as np
 
 from fsl.data.image     import Image
 from fsl.utils.tempdir  import tempdir
 from fsl.wrappers       import imtest
 from file_tree          import FileTree
 
-from pyfix              import  util
+from pyfix              import (util,
+                                io)
 from pyfix.tests        import (main,
                                 unzip,
                                 crop_image,
                                 compare_4D_data,
                                 DATA_ARCHIVE,
-                                CLEANED_DATA_ARCHIVE)
+                                CLEANED_DATA_ARCHIVE,
+                                CIFTI_FILE)
 
 
 def test_clean_mcflirt_params():
@@ -75,3 +79,29 @@ def test_clean_mcflirt_params():
         cleaned2 = Image(cleaned_file).data
 
     compare_4D_data(cleaned1, cleaned2)
+
+
+def test_clean_only():
+
+    tests = ['cifti', 'nifti']
+
+    for test in tests:
+
+        with tempdir():
+            unzip(DATA_ARCHIVE)
+            shutil.copy(CIFTI_FILE, 'rest.ica')
+
+            meldir    = io.InputDirectory.from_input_dir('rest.ica')
+            labelfile = meldir.input_tree.get('hand_labels')
+
+            main(f'-a {labelfile} -o {test}')
+
+            gotc = meldir.input_tree.get('cifti_clean')
+            gotn = meldir.input_tree.get('filtered_func_data_clean')
+
+            if   test == 'nifti':
+                assert     op.exists(gotn)
+                assert not op.exists(gotc)
+            elif test == 'cifti':
+                assert     op.exists(gotc)
+                assert not op.exists(gotn)
