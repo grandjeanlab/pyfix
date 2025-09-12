@@ -1,5 +1,5 @@
 [build-system]
-requires      = ["setuptools"]
+requires      = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -51,9 +51,7 @@ pyfix = [
   "resources/models/*"
 ]
 
-
-[tool.setuptools.dynamic]
-version = {attr = "pyfix.__version__"}
+[tool.setuptools_scm]
 
 [tool.coverage.run]
 include = ["pyfix/*"]

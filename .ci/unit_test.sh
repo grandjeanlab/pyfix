@@ -8,4 +8,4 @@ source $FSLDIR/etc/fslconf/fsl.sh
 
 pip freeze
 
-pytest
+pytest --durations=10

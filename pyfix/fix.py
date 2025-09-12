@@ -69,8 +69,10 @@ Usage for each stage separately, including creation of training data:
   fix -t <training-output-basename> [-l] [-u] <mel1.ica> <mel2.ica> ...
 
     Train classifier (Training output basename followed by list of Melodic
-    directories).  Every Melodic directory must contain hand_labels_noise.txt
-    listing the artefact components, e.g.: [1, 4, 99, ... 140].
+    directories).  Every Melodic directory must contain:
+     - hand_labels_noise.txt listing the artefact components, e.g.:
+       [1, 4, 99, ... 140].
+     - and must have had feature extraction performed.
 
     -l : optional LOO accuracy testing.
     -u : optional hyperparameter optimisation using Optuna (if installed).
@@ -85,7 +87,7 @@ Usage for each stage separately, including creation of training data:
     classifictions.  Every Melodic directory must contain hand_labels_noise.txt
     listing the artefact components, e.g.: [1, 4, 99, ... 140].
 
-  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A]
+  fix -a <labels.txt> [<mel.ica>] [-m] [-h <highpass>] [-A] [-o <nifti|cifti>]
 
     Apply cleanup, using artefacts listed in the .txt file, to the data inside
     the enclosing Feat/Melodic directory.
@@ -108,6 +110,8 @@ Usage for each stage separately, including creation of training data:
 
     -A  apply aggressive (full variance) cleanup, instead of the default less-
         aggressive (unique variance) cleanup.
+
+    -o <nifti|cifti> Only clean NIFTI or CIFTI inputs; default is to clean both.
 
 The following built-in models can be used for classification:
 """ + '\n'.join(f' - {m}' for m in list_models())
@@ -297,17 +301,21 @@ def run_evaluate(meldir     : List[str],
     print(report.report_evaluate(meldir, model, thresholds))
 
 
-def run_apply(labels     : str,
-              meldir     : str   = None,
-              highpass   : float = None,
-              motion     : bool  = False,
-              aggressive : bool  = True,
-              input_tree : str   = None,
-              fix_tree   : str   = None,
+def run_apply(labels      : str,
+              meldir      : str   = None,
+              highpass    : float = None,
+              motion      : bool  = False,
+              aggressive  : bool  = True,
+              input_tree  : str   = None,
+              fix_tree    : str   = None,
+              only        : str   = None,
               **kwargs):
 
     if meldir is None:
         meldir = op.dirname(labels)
+
+    clean_nifti = only in ('nifti', None)
+    clean_cifti = only in ('cifti', None)
 
     indir = io.InputDirectory.from_input_dir(meldir, input_tree, fix_tree)
     ftree = indir.input_tree
@@ -332,7 +340,8 @@ def run_apply(labels     : str,
 
     tr = clean.get_tr(nifti_filt)
 
-    # highpass settings (get from FSF is present and highpass not provided)
+    # highpass settings (get from FSF if
+    # present and highpass not provided)
     fsf = ftree.get('design')
     if (highpass is None) and op.exists(fsf):
         fsf = featanalysis.loadFsf(fsf)
@@ -344,24 +353,24 @@ def run_apply(labels     : str,
         highpass = None
 
     # clean filtered_func_data.nii.gz
-    clean.apply(
-        func_fname=nifti_filt,
-        icamix=icamix,
-        noise_idx=ddremove,
-        func_clean_fname=nifti_clean,
-        do_motion_regression=motion,
-        motion_parameters=motion_parameters,
-        func_tr=tr,
-        highpass=highpass,
-        aggressive=aggressive,
-        varnorm_fname=nifti_clean_varnorm,
-        motparams_nifti_fname=motion_parameters_nifti,
-        motparams_filt_fname=motion_parameters_filt,
-        motparams_clean_fname=motion_parameters_clean,
-    )
+    if clean_nifti:
+        clean.apply(
+            func_fname=nifti_filt,
+            icamix=icamix,
+            noise_idx=ddremove,
+            func_clean_fname=nifti_clean,
+            do_motion_regression=motion,
+            motion_parameters=motion_parameters,
+            func_tr=tr,
+            highpass=highpass,
+            aggressive=aggressive,
+            varnorm_fname=nifti_clean_varnorm,
+            motparams_nifti_fname=motion_parameters_nifti,
+            motparams_filt_fname=motion_parameters_filt,
+            motparams_clean_fname=motion_parameters_clean)
 
     # clean Atlas.dtseries.nii if it exists
-    if op.exists(cifti):
+    if clean_cifti and op.exists(cifti):
 
         dd = nb.load(cifti)
         d0_tr = clean.get_tr(dd)
@@ -382,8 +391,7 @@ def run_apply(labels     : str,
             motion_parameters=motion_parameters,
             func_tr=tr,
             aggressive=aggressive,
-            varnorm_fname=cifti_clean_varnorm,
-        )
+            varnorm_fname=cifti_clean_varnorm)
 
 
 def run_main(meldir    : str,
@@ -549,6 +557,7 @@ def main(argv=None):
     apply_parser.add_argument('-h', '--highpass', metavar='<highpass>',
                               type=float, default=None)
     apply_parser.add_argument('-A', '--aggressive', action='store_true')
+    apply_parser.add_argument('-o', '--only', choices=('nifti', 'cifti'))
 
     if argv is None:
         argv = sys.argv[1:]
